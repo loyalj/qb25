@@ -1,10 +1,13 @@
-import { parse, Statement, PrintNode, LetNode, ExpressionNode, BinaryExpressionNode, StringLiteralNode, NumberLiteralNode, VariableNode } from "./parser.ts";
+import { parse, Statement, PrintNode, LetNode, InputNode, ClsNode, ExpressionNode, BinaryExpressionNode, StringLiteralNode, NumberLiteralNode, VariableNode } from "./parser.ts";
 
-export function execute(source: string) {
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
+export async function execute(source: string) {
   const statements = parse(source);
   let variables: Record<string, string | number> = {};
 
-  function evaluateExpression(node: ExpressionNode): string | number {
+  async function evaluateExpression(node: ExpressionNode): Promise<string | number> {
     switch (node.type) {
       case "StringLiteral":
         return (node as StringLiteralNode).value;
@@ -19,16 +22,14 @@ export function execute(source: string) {
       }
       case "BinaryExpression": {
         const binaryNode = node as BinaryExpressionNode;
-        const left = evaluateExpression(binaryNode.left);
-        const right = evaluateExpression(binaryNode.right);
+        const left = await evaluateExpression(binaryNode.left);
+        const right = await evaluateExpression(binaryNode.right);
         const operator = binaryNode.operator;
 
-        // Handle String Concatenation
         if (typeof left === "string" || typeof right === "string") {
           return String(left) + String(right);
         }
 
-        // Handle Math Operations
         if (typeof left === "number" && typeof right === "number") {
           switch (operator) {
             case "+": return left + right;
@@ -50,12 +51,29 @@ export function execute(source: string) {
     switch (statement.type) {
       case "Print": {
         const printNode = statement as PrintNode;
-        console.log(evaluateExpression(printNode.expression));
+        console.log(await evaluateExpression(printNode.expression));
         break;
       }
       case "Let": {
         const letNode = statement as LetNode;
-        variables[letNode.variable] = evaluateExpression(letNode.value);
+        variables[letNode.variable] = await evaluateExpression(letNode.value);
+        break;
+      }
+      
+      case "Input": {
+        const inputNode = statement as InputNode;
+        await Deno.stdout.write(encoder.encode(`? `));
+
+        const inputBuffer = new Uint8Array(1024);
+        const n = await Deno.stdin.read(inputBuffer);
+        if (!n) return;
+
+        let value = decoder.decode(inputBuffer.subarray(0, n)).trim();
+        variables[inputNode.variable] = isNaN(Number(value)) ? value : Number(value);
+        break;
+      }
+      case "Cls": {
+        console.clear();
         break;
       }
       default:

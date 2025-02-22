@@ -15,6 +15,15 @@ export interface LetNode extends ASTNode {
   value: ExpressionNode;
 }
 
+export interface InputNode extends ASTNode {
+  type: "Input";
+  variable: string;
+}
+
+export interface ClsNode extends ASTNode {
+  type: "Cls";
+}
+
 export type ExpressionNode = StringLiteralNode | NumberLiteralNode | VariableNode | BinaryExpressionNode;
 
 export interface StringLiteralNode {
@@ -39,7 +48,7 @@ export interface BinaryExpressionNode {
   right: ExpressionNode;
 }
 
-export type Statement = PrintNode | LetNode;
+export type Statement = PrintNode | LetNode | InputNode | ClsNode;
 
 export function parse(source: string): Statement[] {
   let tokens = tokenize(source);
@@ -111,6 +120,13 @@ export function parse(source: string): Statement[] {
         eat(TokenType.OPERATOR); // Consume '='
         let value = parseExpression();
         statements.push({ type: "Let", variable, value });
+      } else if (token.value === "INPUT") {
+        index++; // Consume INPUT
+        let variable = eat(TokenType.IDENTIFIER).value;
+        statements.push({ type: "Input", variable });
+      } else if (token.value === "CLS") {
+        index++; // Consume CLS
+        statements.push({ type: "Cls" });
       }
     }
   }
