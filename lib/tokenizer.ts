@@ -14,7 +14,7 @@ export enum TokenType {
   }
   
   const keywords = new Set([
-    "PRINT", "LET", "INPUT", "IF", "THEN", "ELSE", "GOTO", "FOR", "NEXT", "WHILE", "WEND", "CLS"
+    "PRINT", "LET", "INPUT", "IF", "THEN", "ELSE", "GOTO", "FOR", "NEXT", "WHILE", "WEND", "CLS", "AND", "OR", "NOT"
   ]);
   
   const operators = new Set(["+", "-", "*", "/", "=", "<", ">", "<=", ">=", "<>"]);
