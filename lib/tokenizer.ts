@@ -6,6 +6,10 @@ export enum TokenType {
     OPERATOR,
     PUNCTUATION,
     EOF,
+    IF_KEYWORD,
+    THEN_KEYWORD,
+    ELSE_KEYWORD,
+    NEWLINE,
   }
   
   export interface Token {
@@ -14,10 +18,10 @@ export enum TokenType {
   }
   
   const keywords = new Set([
-    "PRINT", "LET", "INPUT", "IF", "THEN", "ELSE", "GOTO", "FOR", "NEXT", "WHILE", "WEND", "CLS", "AND", "OR", "NOT"
+    "PRINT", "LET", "INPUT", "IF", "THEN", "ELSE", "GOTO", "FOR", "NEXT", "WHILE", "WEND", "CLS"
   ]);
   
-  const operators = new Set(["+", "-", "*", "/", "=", "<", ">", "<=", ">=", "<>"]);
+  const operators = new Set(["+", "-", "*", "/", "=", "<", ">", "<=", ">=", "<>", "AND", "OR", "NOT"]);
   
   export function tokenize(source: string): Token[] {
     let tokens: Token[] = [];
@@ -26,7 +30,14 @@ export enum TokenType {
     while (i < source.length) {
       let char = source[i];
   
-      // Ignore whitespace
+      // Handle newlines explicitly
+      if (char === '\n') {
+        tokens.push({ type: TokenType.NEWLINE, value: '\n' });
+        i++;
+        continue;
+      }
+
+      // Ignore other whitespace
       if (/\s/.test(char)) {
         i++;
         continue;
@@ -35,6 +46,13 @@ export enum TokenType {
       // Handle comments (`'` in QBasic)
       if (char === "'") {
         while (i < source.length && source[i] !== "\n") i++;
+        continue;
+      }
+
+      // Handle statement separator (':')
+      if (char === ':') {
+        tokens.push({ type: TokenType.NEWLINE, value: ':' }); // Use NEWLINE type for both : and \n
+        i++;
         continue;
       }
   
@@ -60,7 +78,18 @@ export enum TokenType {
         let start = i++;
         while (i < source.length && /[A-Za-z0-9_]/.test(source[i])) i++;
         let value = source.slice(start, i).toUpperCase();
-        let type = keywords.has(value) ? TokenType.KEYWORD : TokenType.IDENTIFIER;
+        
+        // Updated special handling to check operators first
+        let type = TokenType.IDENTIFIER;
+        if (operators.has(value)) {
+            type = TokenType.OPERATOR;
+        } else if (keywords.has(value)) {
+            type = TokenType.KEYWORD;
+            if (value === "IF") type = TokenType.IF_KEYWORD;
+            else if (value === "THEN") type = TokenType.THEN_KEYWORD;
+            else if (value === "ELSE") type = TokenType.ELSE_KEYWORD;
+        }
+        
         tokens.push({ type, value });
         continue;
       }
@@ -87,10 +116,13 @@ export enum TokenType {
         continue;
       }
   
-      throw new Error(`Unexpected character: ${char}`);
+      // Update error message for unexpected characters
+      throw new Error(`Unexpected token: "${char}"`);
     }
   
-    tokens.push({ type: TokenType.EOF, value: "" });
+    // Only add EOF if last token wasn't a newline
+    if (tokens.length === 0 || tokens[tokens.length - 1].type !== TokenType.NEWLINE) {
+      tokens.push({ type: TokenType.EOF, value: "" });
+    }
     return tokens;
   }
-  

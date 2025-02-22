@@ -24,7 +24,20 @@ export interface ClsNode extends ASTNode {
   type: "Cls";
 }
 
-export type ExpressionNode = StringLiteralNode | NumberLiteralNode | VariableNode | BinaryExpressionNode;
+export interface IfNode extends ASTNode {
+  type: "If";
+  condition: ExpressionNode;
+  thenBranch: Statement[];
+  elseBranch?: Statement[];
+}
+
+export interface UnaryExpressionNode {
+  type: "UnaryExpression";
+  operator: string;
+  operand: ExpressionNode;
+}
+
+export type ExpressionNode = StringLiteralNode | NumberLiteralNode | VariableNode | BinaryExpressionNode | UnaryExpressionNode;
 
 export interface StringLiteralNode {
   type: "StringLiteral";
@@ -48,14 +61,23 @@ export interface BinaryExpressionNode {
   right: ExpressionNode;
 }
 
-export type Statement = PrintNode | LetNode | InputNode | ClsNode;
+export type Statement = PrintNode | LetNode | InputNode | ClsNode | IfNode;
 
 export function parse(source: string): Statement[] {
   let tokens = tokenize(source);
   let index = 0;
   let statements: Statement[] = [];
 
+  function skipNewlines() {
+    while (index < tokens.length && tokens[index].type === TokenType.NEWLINE) {
+      index++;
+    }
+  }
+
   function eat(type: TokenType): Token {
+    if (index >= tokens.length || tokens[index].type === TokenType.EOF) {
+      throw new Error("Unexpected end of input");
+    }
     if (tokens[index].type !== type) {
       throw new Error(`Unexpected token: ${tokens[index].value}`);
     }
@@ -63,28 +85,57 @@ export function parse(source: string): Statement[] {
   }
 
   function getPrecedence(op: string): number {
-    if (op === "+" || op === "-") return 1;
-    if (op === "*" || op === "/") return 2;
-    return 0;
+    if (op === "AND" || op === "OR") return 0;  // Lowest precedence
+    if (op === "=" || op === "<>" || op === "<" || op === ">" || op === "<=" || op === ">=") return 1;
+    if (op === "+" || op === "-") return 2;
+    if (op === "*" || op === "/") return 3;
+    if (op === "NOT") return 4;  // Highest precedence
+    return -1;
   }
 
   function parseExpression(precedence = 0): ExpressionNode {
-    let left = parsePrimary();
+    if (index >= tokens.length || tokens[index].type === TokenType.EOF) {
+      throw new Error("Unexpected end of input");
+    }
 
+    let left: ExpressionNode;
+
+    // Handle unary operators (NOT)
+    if (tokens[index].type === TokenType.OPERATOR && tokens[index].value === "NOT") {
+        index++; // Consume NOT
+        // Don't increase precedence for NOT's operand to allow proper grouping
+        const operand = parseExpression(0);
+        left = {
+            type: "UnaryExpression",
+            operator: "NOT",
+            operand
+        } as UnaryExpressionNode;
+    } else {
+        left = parsePrimary();
+    }
+
+    // Continue parsing binary operators while precedence allows
     while (
-      tokens[index] &&
-      tokens[index].type === TokenType.OPERATOR &&
-      getPrecedence(tokens[index].value) >= precedence
+        tokens[index] &&
+        tokens[index].type === TokenType.OPERATOR &&
+        tokens[index].value !== "NOT" && // NOT is only unary, not binary
+        getPrecedence(tokens[index].value) >= precedence &&
+        tokens[index].type !== TokenType.THEN_KEYWORD // Stop at THEN
     ) {
-      let operator = eat(TokenType.OPERATOR).value;
-      let right = parseExpression(getPrecedence(operator) + 1);
-      left = { type: "BinaryExpression", operator, left, right } as BinaryExpressionNode;
+        let operator = tokens[index++].value;
+        let right = parseExpression(getPrecedence(operator) + 1);
+        left = { type: "BinaryExpression", operator, left, right } as BinaryExpressionNode;
     }
 
     return left;
   }
 
+  // Update parsePrimary to remove NOT handling since it's now in parseExpression
   function parsePrimary(): ExpressionNode {
+    if (index >= tokens.length || tokens[index].type === TokenType.EOF) {
+      throw new Error("Unexpected end of input");
+    }
+
     let token = tokens[index];
 
     if (token.type === TokenType.STRING) {
@@ -106,28 +157,78 @@ export function parse(source: string): Statement[] {
     throw new Error(`Unexpected token: ${token.value}`);
   }
 
-  while (tokens[index].type !== TokenType.EOF) {
+  function parseStatement(): Statement {
+    if (index >= tokens.length || tokens[index].type === TokenType.EOF) {
+      throw new Error("Unexpected end of input");
+    }
+
     let token = tokens[index];
+    
+    // Remove redundant EOF check that was here
+    
+    if (token.type === TokenType.IF_KEYWORD) {
+      index++; // Consume IF
+      const condition = parseExpression();
+      
+      if (index >= tokens.length || tokens[index].type !== TokenType.THEN_KEYWORD) {
+        throw new Error("Expected THEN after IF condition");
+      }
+      index++; // Consume THEN
+      
+      const thenBranch = [parseStatement()];
+      
+      let elseBranch: Statement[] | undefined;
+      if (tokens[index]?.type === TokenType.ELSE_KEYWORD) {
+        index++; // Consume ELSE
+        elseBranch = [parseStatement()];
+      }
+      
+      return { type: "If", condition, thenBranch, elseBranch };
+    }
 
     if (token.type === TokenType.KEYWORD) {
       if (token.value === "PRINT") {
         index++; // Consume PRINT
         let expression = parseExpression();
-        statements.push({ type: "Print", expression });
+        return { type: "Print", expression };
       } else if (token.value === "LET") {
         index++; // Consume LET
+        if (index >= tokens.length) {
+          throw new Error("Unexpected end of input");
+        }
         let variable = eat(TokenType.IDENTIFIER).value;
         eat(TokenType.OPERATOR); // Consume '='
         let value = parseExpression();
-        statements.push({ type: "Let", variable, value });
+        return { type: "Let", variable, value };
       } else if (token.value === "INPUT") {
         index++; // Consume INPUT
         let variable = eat(TokenType.IDENTIFIER).value;
-        statements.push({ type: "Input", variable });
+        return { type: "Input", variable };
       } else if (token.value === "CLS") {
         index++; // Consume CLS
-        statements.push({ type: "Cls" });
+        return { type: "Cls" };
       }
+    }
+
+    throw new Error(`Unexpected token: ${token.value}`);
+  }
+
+  // Modified parser loop
+  while (index < tokens.length) {
+    skipNewlines(); // Skip any leading newlines
+    
+    // Break if we reach EOF after skipping newlines
+    if (index >= tokens.length || tokens[index].type === TokenType.EOF) {
+      break;
+    }
+
+    statements.push(parseStatement());
+    
+    if (index < tokens.length && tokens[index].type !== TokenType.EOF) {
+      if (tokens[index].type !== TokenType.NEWLINE) {
+        throw new Error(`Expected newline or end of input, got: ${tokens[index].value}`);
+      }
+      skipNewlines();
     }
   }
 
