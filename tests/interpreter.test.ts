@@ -378,3 +378,72 @@ Deno.test("operator precedence and grouping", async () => {
     assertEquals(lines[3], "true");   // (NOT 0) AND 1
     assertEquals(lines[4], "true");   // 1 OR (0 AND 0)
 });
+
+Deno.test("interpreter handles LOG and EXP", async () => {
+  const logs: string[] = [];
+  console.log = (str: string) => logs.push(String(str));
+
+  await execute(`
+    PRINT LOG(EXP(1))  ' Should be 1
+    PRINT EXP(LOG(2))  ' Should be 2
+  `);
+
+  assertEquals(Number(logs[0]).toFixed(6), "1.000000");
+  assertEquals(Number(logs[1]).toFixed(6), "2.000000");
+});
+
+Deno.test("interpreter handles type conversions", async () => {
+  const logs: string[] = [];
+  console.log = (str: string) => logs.push(String(str));
+
+  await execute(`
+    PRINT CINT(3.7)    ' Should round to 4
+    PRINT CINT(-3.7)   ' Should round to -4
+    PRINT CSNG(1/3)    ' Should show ~7 decimal places
+    PRINT CDBL(1/3)    ' Should show ~15 decimal places
+  `);
+
+  assertEquals(logs[0], "4");
+  assertEquals(logs[1], "-4");
+  assertEquals(logs[2].length <= 9, true);  // CSNG precision check
+  assertEquals(logs[3].length > 9, true);   // CDBL precision check
+});
+
+Deno.test("interpreter handles ATN2", async () => {
+  const logs: string[] = [];
+  console.log = (str: string) => logs.push(String(str));
+
+  await execute(`
+    PRINT ATN2(1, 1)     ' Should be π/4
+    PRINT ATN2(-1, -1)   ' Should be -3π/4
+    PRINT ATN2(0, 1)     ' Should be 0
+  `);
+
+  assertEquals(Number(logs[0]).toFixed(6), "0.785398");
+  assertEquals(Number(logs[1]).toFixed(6), "-2.356194");
+  assertEquals(logs[2], "0");
+});
+
+// Add ASC function tests
+Deno.test("interpreter handles ASC function", async () => {
+  const logs: string[] = [];
+  console.log = (str: string) => logs.push(String(str));
+
+  await execute('PRINT ASC("A")');
+  assertEquals(logs[0], "65");
+
+  await execute('PRINT ASC("abc")');
+  assertEquals(logs[1], "97");
+
+  await assertRejects(
+    () => execute('PRINT ASC("")'),
+    Error,
+    "Cannot get ASCII code of empty string"
+  );
+
+  await assertRejects(
+    () => execute('PRINT ASC(123)'),
+    Error,
+    "ASC function requires a string argument"
+  );
+});

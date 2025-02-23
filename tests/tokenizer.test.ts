@@ -128,3 +128,20 @@ Deno.test("tokenizer handles decimal numbers", () => {
     assertEquals(numbers.length, 5);
     assertEquals(numbers.map(n => n.value), ["3.14159", "0.5", ".123", "42.", "1e3"]);
 });
+
+Deno.test("tokenizer recognizes all math functions", () => {
+  const source = `
+    PRINT LOG(10)
+    PRINT EXP(1)
+    PRINT ATN2(1, 1)
+    PRINT CINT(3.7)
+    PRINT CSNG(3.14159265359)
+    PRINT CDBL(3.14159265359)
+  `;
+  const tokens = tokenize(source);
+  const functionNames = tokens
+    .filter(t => t.type === TokenType.FUNCTION)
+    .map(t => t.value);
+  
+  assertEquals(functionNames, ["LOG", "EXP", "ATN2", "CINT", "CSNG", "CDBL"]);
+});

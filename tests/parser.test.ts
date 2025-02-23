@@ -1,6 +1,6 @@
 import { assertEquals, assertThrows, assert } from "https://deno.land/std@0.204.0/testing/asserts.ts";
 import { parse } from "../lib/parser.ts";
-import type { PrintNode } from "../lib/parser.ts";
+import type { PrintNode, FunctionCallNode } from "../lib/parser.ts";
 
 Deno.test("parser handles basic IF THEN ELSE", () => {
     const input = "IF x = 5 THEN PRINT x ELSE PRINT y";
@@ -166,4 +166,29 @@ Deno.test("parser handles all built-in math functions", () => {
         assertEquals(expr.type, "FunctionCall");
         assert(expr.arguments.length > 0, `${func} should have arguments`);
     }
+});
+
+Deno.test("parser handles two-argument functions", () => {
+  const statements = parse('PRINT ATN2(1, 1)');
+  assertEquals(statements.length, 1);
+  assertEquals((statements[0] as PrintNode).expression.type, "FunctionCall");
+  const funcCall = (statements[0] as PrintNode).expression as FunctionCallNode;
+  assertEquals(funcCall.name, "ATN2");
+  assertEquals(funcCall.arguments.length, 2);
+});
+
+Deno.test("parser handles type conversion functions", () => {
+  const source = `
+    PRINT CINT(3.7)
+    PRINT CSNG(3.14159265359)
+    PRINT CDBL(3.14159265359)
+  `;
+  const statements = parse(source);
+  assertEquals(statements.length, 3);
+  
+  // Check each statement is a function call with correct name
+  const functionNames = statements.map(stmt => 
+    ((stmt as PrintNode).expression as FunctionCallNode).name
+  );
+  assertEquals(functionNames, ["CINT", "CSNG", "CDBL"]);
 });

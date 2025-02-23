@@ -37,7 +37,8 @@ export enum TokenType {
   
   export const functions = new Set([
     "ABS", "SGN", "INT", "RND", "SQR", 
-    "SIN", "COS", "TAN"
+    "SIN", "COS", "TAN", "ASC", "ATN",
+    "LOG", "EXP", "ATN2", "CINT", "CSNG", "CDBL"
   ]);
   
   export function tokenize(source: string): Token[] {

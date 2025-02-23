@@ -21,7 +21,40 @@ class Interpreter {
     },
     "SIN": (x: number) => Math.sin(x),
     "COS": (x: number) => Math.cos(x),
-    "TAN": (x: number) => Math.tan(x)
+    "TAN": (x: number) => Math.tan(x),
+    "ASC": (str: string) => {
+      if (typeof str !== 'string') {
+        throw new Error("ASC function requires a string argument");
+      }
+      if (str.length === 0) {
+        throw new Error("Cannot get ASCII code of empty string");
+      }
+      return str.charCodeAt(0);
+    },
+    "ATN": (x: number) => Math.atan(x),
+    "LOG": (x: number) => {
+      if (x <= 0) throw new Error(x === 0 ? "Cannot take logarithm of zero" : "Cannot take logarithm of negative number");
+      return Math.log(x);
+    },
+    "EXP": (x: number) => Math.exp(x),
+    "ATN2": (y: number, x: number) => Math.atan2(y, x),
+    "CINT": (x: number) => {
+      // QBasic rounds ties away from zero
+      if (x > 0) {
+        return Math.floor(x + 0.5);
+      } else {
+        return Math.ceil(x - 0.5);
+      }
+    },
+    "CSNG": (x: number) => {
+      const str = x.toPrecision(7);
+      // Convert to scientific notation if number is too large or small
+      if (Math.abs(x) >= 1e7 || (Math.abs(x) < 0.0001 && x !== 0)) {
+        return Number(str).toExponential(6);
+      }
+      return Number(str);
+    },
+    "CDBL": (x: number) => x, // JavaScript numbers are already double precision
   };
 
   private async evaluateExpression(node: ExpressionNode): Promise<string | number | boolean> {
@@ -124,7 +157,15 @@ class Interpreter {
           node.arguments.map(arg => this.evaluateExpression(arg))
         );
 
-        // Ensure all arguments are numbers
+        // Special handling for ASC function which expects string
+        if (node.name === "ASC") {
+          if (typeof args[0] !== 'string') {
+            throw new Error("ASC function requires a string argument");
+          }
+          return func(args[0]);
+        }
+
+        // For other functions, ensure numeric arguments
         const numericArgs = args.map(arg => {
           if (typeof arg !== 'number') {
             throw new Error(`Function ${node.name} expects numeric arguments`);
@@ -133,9 +174,8 @@ class Interpreter {
         });
 
         try {
-          // Call the function
           return func(...numericArgs);
-        } catch (e: any) { // Type annotation added here
+        } catch (e: any) {
           throw new Error(`Error in function ${node.name}: ${e?.message || 'Unknown error'}`);
         }
       }
