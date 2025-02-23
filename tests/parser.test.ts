@@ -1,5 +1,6 @@
-import { assertEquals } from "https://deno.land/std@0.204.0/testing/asserts.ts";
+import { assertEquals, assertThrows, assert } from "https://deno.land/std@0.204.0/testing/asserts.ts";
 import { parse } from "../lib/parser.ts";
+import type { PrintNode } from "../lib/parser.ts";
 
 Deno.test("parser handles basic IF THEN ELSE", () => {
     const input = "IF x = 5 THEN PRINT x ELSE PRINT y";
@@ -63,7 +64,7 @@ Deno.test("parser handles string concatenation", () => {
 Deno.test("parser handles NOT operator", () => {
     const cases = [
         {
-            input: "IF NOT x > 5 THEN PRINT x",
+            input: "IF NOT x > 5 THEN PRINT x",  // Test was failing on this input
             checkAst: (ifNode: any) => {
                 assertEquals(ifNode.condition.type, "UnaryExpression");
                 assertEquals(ifNode.condition.operator, "NOT");
@@ -113,4 +114,56 @@ Deno.test("parser handles multiple statements", () => {
     assertEquals(ast.length, 2);
     assertEquals(ast[0].type, "Let");
     assertEquals(ast[1].type, "Print");
+});
+
+Deno.test("parser handles function calls", () => {
+    const result = parse("PRINT ABS(-5)")[0] as PrintNode;
+    assertEquals(result.type, "Print");
+    assertEquals((result.expression as any).type, "FunctionCall");
+    assertEquals((result.expression as any).name, "ABS");
+    assertEquals((result.expression as any).arguments.length, 1);
+});
+
+Deno.test("parser handles nested function calls", () => {
+    const result = parse("PRINT ABS(SGN(-10))")[0] as PrintNode;
+    const expr = result.expression as any;
+    assertEquals(expr.type, "FunctionCall");
+    assertEquals(expr.name, "ABS");
+    assertEquals(expr.arguments[0].type, "FunctionCall");
+    assertEquals(expr.arguments[0].name, "SGN");
+});
+
+Deno.test("parser handles function calls with multiple arguments", async () => {
+    // First test valid multi-argument functions
+    const result = parse("PRINT RND(1, 10)")[0] as PrintNode;
+    const expr = result.expression as any;
+    assertEquals(expr.type, "FunctionCall");
+    assertEquals(expr.arguments.length, 2);
+
+    // Then test unknown function
+    assertThrows(
+        () => parse("PRINT MIN(42)"),
+        Error,
+        "Unknown function: MIN"
+    );
+});
+
+Deno.test("parser handles all built-in math functions", () => {
+    const functions = [
+        "ABS(-1)", 
+        "SGN(-5)", 
+        "INT(3.14)", 
+        "RND(100)",
+        "SQR(16)",
+        "SIN(0)",
+        "COS(0)",
+        "TAN(0)"
+    ];
+
+    for (const func of functions) {
+        const result = parse(`PRINT ${func}`)[0] as PrintNode;
+        const expr = result.expression as any;
+        assertEquals(expr.type, "FunctionCall");
+        assert(expr.arguments.length > 0, `${func} should have arguments`);
+    }
 });

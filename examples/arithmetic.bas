@@ -1,27 +1,27 @@
-' Arithmetic Operations Test Suite
-PRINT "Testing Basic Arithmetic Operations"
+CLS
+PRINT "QB25 Arithmetic Operations Test Suite"
 PRINT "=================================="
 
+' Basic operations with integers
 LET a = 10
 LET b = 3
 
-PRINT "Addition: 10 + 3 should be 13"
-PRINT "Result: " + (a + b)
+PRINT "Basic Operations:"
+PRINT "-----------------"
+PRINT "a = " + a + ", b = " + b
+PRINT "Addition (a + b): " + (a + b)
+PRINT "Subtraction (a - b): " + (a - b)
+PRINT "Multiplication (a * b): " + (a * b)
+PRINT "Division (a / b): " + (a / b)
 
-PRINT "Subtraction: 10 - 3 should be 7"
-PRINT "Result: " + (a - b)
+PRINT "Order of Operations:"
+PRINT "------------------"
+PRINT "2 + 3 * 4 = " + (2 + 3 * 4)
+PRINT "(2 + 3) * 4 = " + ((2 + 3) * 4)
+PRINT "10 / 2 + 3 = " + (10 / 2 + 3)
+PRINT "10 / (2 + 3) = " + (10 / (2 + 3))
 
-PRINT "Multiplication: 10 * 3 should be 30"
-PRINT "Result: " + (a * b)
-
-PRINT "Division: 10 / 3 should be ~3.333..."
-PRINT "Result: " + (a / b)
-
-PRINT "Complex Expression: (10 + 3) * (10 - 3) should be 13 * 7 = 91"
-PRINT "Result: " + ((a + b) * (a - b))
-
-' Test operator precedence
-PRINT "Testing Operator Precedence"
-PRINT "=========================="
-PRINT "2 + 3 * 4 should be 14 (not 20)"
-PRINT "Result: " + (2 + 3 * 4)
+PRINT "Complex Expressions:"
+PRINT "------------------"
+LET x = ((a + b) * (a - b)) / (2 + 3)
+PRINT "((a + b) * (a - b)) / (2 + 3) = " + x

@@ -1,4 +1,4 @@
-import { tokenize, Token, TokenType } from "./tokenizer.ts";
+import { tokenize, Token, TokenType, functions } from "./tokenizer.ts";
 
 export interface ASTNode {
   type: string;
@@ -37,7 +37,27 @@ export interface UnaryExpressionNode {
   operand: ExpressionNode;
 }
 
-export type ExpressionNode = StringLiteralNode | NumberLiteralNode | VariableNode | BinaryExpressionNode | UnaryExpressionNode;
+export interface FunctionCallNode {
+  type: "FunctionCall";
+  name: string;
+  arguments: ExpressionNode[];
+}
+
+export interface ArrayAccessNode {
+  type: "ArrayAccess";
+  name: string;
+  index: ExpressionNode;
+}
+
+// Add EmptyExpression interface
+export interface EmptyExpressionNode {
+  type: "EmptyExpression";
+}
+
+// Update ExpressionNode type to include EmptyExpression
+export type ExpressionNode = StringLiteralNode | NumberLiteralNode | VariableNode | 
+                           BinaryExpressionNode | UnaryExpressionNode | FunctionCallNode |
+                           ArrayAccessNode | EmptyExpressionNode;
 
 export interface StringLiteralNode {
   type: "StringLiteral";
@@ -61,7 +81,13 @@ export interface BinaryExpressionNode {
   right: ExpressionNode;
 }
 
-export type Statement = PrintNode | LetNode | InputNode | ClsNode | IfNode;
+export interface DimNode extends ASTNode {
+  type: "Dim";
+  variable: string;
+  size: number;
+}
+
+export type Statement = PrintNode | LetNode | InputNode | ClsNode | IfNode | DimNode;
 
 export function parse(source: string): Statement[] {
   let tokens = tokenize(source);
@@ -85,58 +111,102 @@ export function parse(source: string): Statement[] {
   }
 
   function getPrecedence(op: string): number {
-    if (op === "AND" || op === "OR") return 0;  // Lowest precedence
-    if (op === "=" || op === "<>" || op === "<" || op === ">" || op === "<=" || op === ">=") return 1;
-    if (op === "+" || op === "-") return 2;
-    if (op === "*" || op === "/") return 3;
-    if (op === "NOT") return 4;  // Highest precedence
-    return -1;
+    switch (op) {
+        case "OR": return 1;
+        case "AND": return 2;
+        case "NOT": return 3;
+        case "=":
+        case "<>":
+        case "<":
+        case ">":
+        case "<=":
+        case ">=":
+            return 4;
+        case "+":
+        case "-":
+            return 5;
+        case "*":
+        case "/":
+            return 6;
+        default:
+            return 0;
+    }
   }
 
   function parseExpression(precedence = 0): ExpressionNode {
-    if (index >= tokens.length || tokens[index].type === TokenType.EOF) {
-      throw new Error("Unexpected end of input");
-    }
-
     let left: ExpressionNode;
-
-    // Handle unary operators (NOT)
-    if (tokens[index].type === TokenType.OPERATOR && tokens[index].value === "NOT") {
+    
+    if (tokens[index]?.type === TokenType.NOT_OPERATOR) {
         index++; // Consume NOT
-        // Don't increase precedence for NOT's operand to allow proper grouping
-        const operand = parseExpression(0);
         left = {
             type: "UnaryExpression",
             operator: "NOT",
-            operand
-        } as UnaryExpressionNode;
+            operand: parseExpression(getPrecedence("NOT") - 1)  // Changed to respect precedence
+        };
     } else {
         left = parsePrimary();
     }
 
-    // Continue parsing binary operators while precedence allows
     while (
-        tokens[index] &&
-        tokens[index].type === TokenType.OPERATOR &&
-        tokens[index].value !== "NOT" && // NOT is only unary, not binary
-        getPrecedence(tokens[index].value) >= precedence &&
-        tokens[index].type !== TokenType.THEN_KEYWORD // Stop at THEN
+        index < tokens.length &&
+        tokens[index]?.type === TokenType.OPERATOR &&
+        getPrecedence(tokens[index].value) >= precedence
     ) {
-        let operator = tokens[index++].value;
-        let right = parseExpression(getPrecedence(operator) + 1);
-        left = { type: "BinaryExpression", operator, left, right } as BinaryExpressionNode;
+        const operator = tokens[index++].value;
+        const nextPrecedence = getPrecedence(operator);
+        // For left-associative operators, use next precedence level
+        const right = parseExpression(
+            operator === "AND" || operator === "OR" ? nextPrecedence + 1 : nextPrecedence
+        );
+        left = { type: "BinaryExpression", operator, left, right };
     }
 
     return left;
   }
 
-  // Update parsePrimary to remove NOT handling since it's now in parseExpression
   function parsePrimary(): ExpressionNode {
-    if (index >= tokens.length || tokens[index].type === TokenType.EOF) {
-      throw new Error("Unexpected end of input");
+    if (index >= tokens.length) {
+        throw new Error("Unexpected end of input");
     }
 
-    let token = tokens[index];
+    const token = tokens[index];
+
+    // Handle empty lines and whitespace more gracefully
+    if (token.type === TokenType.NEWLINE) {
+        index++;
+        return { type: "EmptyExpression" };
+    }
+
+    // Handle numbers with optional leading + or -
+    if ((token.type as TokenType) === TokenType.NUMBER || 
+        (token.type === TokenType.OPERATOR && 
+         (token.value === '+' || token.value === '-') && 
+         tokens[index + 1] && (tokens[index + 1].type as TokenType) === TokenType.NUMBER)) {
+        
+        const isNegative = token.type === TokenType.OPERATOR && token.value === '-';
+        if (isNegative || token.value === '+') {
+            index++;
+        }
+        const numToken = tokens[index++];
+        return {
+            type: "NumberLiteral",
+            value: Number((isNegative ? '-' : '') + numToken.value)
+        };
+    }
+
+    // Add support for both PUNCTUATION and LEFT_PAREN types for opening parenthesis
+    if ((token.type === TokenType.PUNCTUATION && token.value === "(") ||
+        token.type === TokenType.LEFT_PAREN) {
+      index++; // Consume '('
+      let expression = parseExpression(0);
+      // Support both PUNCTUATION and RIGHT_PAREN for closing parenthesis
+      if (tokens[index].type === TokenType.RIGHT_PAREN || 
+          (tokens[index].type === TokenType.PUNCTUATION && tokens[index].value === ")")) {
+        index++;
+        return expression;
+      }
+      throw new Error("Expected closing parenthesis");
+    }
 
     if (token.type === TokenType.STRING) {
       index++;
@@ -144,14 +214,31 @@ export function parse(source: string): Statement[] {
     } else if (token.type === TokenType.NUMBER) {
       index++;
       return { type: "NumberLiteral", value: Number(token.value) };
-    } else if (token.type === TokenType.IDENTIFIER) {
-      index++;
-      return { type: "Variable", name: token.value };
-    } else if (token.type === TokenType.PUNCTUATION && token.value === "(") {
-      index++; // Consume '('
-      let expression = parseExpression();
-      eat(TokenType.PUNCTUATION); // Consume ')'
-      return expression;
+    } else if (token.type === TokenType.FUNCTION || token.type === TokenType.IDENTIFIER) {
+        index++;
+        if (tokens[index]?.type === TokenType.LEFT_PAREN) {
+            index++; // Consume '('
+            const args: ExpressionNode[] = [];
+            
+            // Handle function arguments
+            if (tokens[index].type !== TokenType.RIGHT_PAREN) {
+                args.push(parseExpression());
+                while (tokens[index].type === TokenType.COMMA) {
+                    index++; // Consume comma
+                    args.push(parseExpression());
+                }
+            }
+            
+            eat(TokenType.RIGHT_PAREN);
+
+            // Check if this is a known function when it's being used as one
+            if (token.type === TokenType.IDENTIFIER && !functions.has(token.value)) {
+                throw new Error(`Unknown function: ${token.value}`);
+            }
+
+            return { type: "FunctionCall", name: token.value, arguments: args };
+        }
+        return { type: "Variable", name: token.value };
     }
 
     throw new Error(`Unexpected token: ${token.value}`);
@@ -260,6 +347,15 @@ export function parse(source: string): Statement[] {
       }
     }
 
+    if (token.type === TokenType.DIM_KEYWORD) {
+      index++; // Consume DIM
+      const variable = eat(TokenType.IDENTIFIER).value;
+      eat(TokenType.LEFT_PAREN);
+      const size = Number(eat(TokenType.NUMBER).value);
+      eat(TokenType.RIGHT_PAREN);
+      return { type: "Dim", variable, size };
+    }
+
     throw new Error(`Unexpected token: ${token.value}`);
   }
 
@@ -274,11 +370,17 @@ export function parse(source: string): Statement[] {
 
     statements.push(parseStatement());
     
+    // After parsing a statement, we should allow either:
+    // 1. End of file
+    // 2. Newline
+    // 3. Another valid statement (like in multi-line IF)
     if (index < tokens.length && tokens[index].type !== TokenType.EOF) {
-      if (tokens[index].type !== TokenType.NEWLINE) {
-        throw new Error(`Expected newline or end of input, got: ${tokens[index].value}`);
+      // If it's a newline, skip all consecutive newlines
+      if (tokens[index].type === TokenType.NEWLINE) {
+        skipNewlines();
       }
-      skipNewlines();
+      // Otherwise, continue to parse the next statement
+      // This allows IF/THEN blocks to work without requiring newlines
     }
   }
 

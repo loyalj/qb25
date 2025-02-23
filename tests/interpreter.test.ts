@@ -242,3 +242,139 @@ Deno.test("interpreter handles empty programs", async () => {
     await execute("  \n  \t  \n");
     // Should not throw any errors
 });
+
+// Add new test group for functions
+Deno.test("interpreter executes math functions", async () => {
+    const output = await withOutput(async () => {
+        await execute(`
+            PRINT ABS(-5)
+            PRINT SGN(-10)
+        `);
+    });
+    assertEquals(output, "5\n-1");
+});
+
+Deno.test("interpreter handles nested function calls", async () => {
+    const output = await withOutput(async () => {
+        await execute(`
+            PRINT ABS(SGN(-10))
+        `);
+    });
+    assertEquals(output, "1");
+});
+
+Deno.test("interpreter handles function errors", async () => {
+    await assertRejects(
+        () => execute('PRINT UNKNOWN(5)'),
+        Error,
+        "Unknown function: UNKNOWN"
+    );
+
+    await assertRejects(
+        () => execute('PRINT ABS("hello")'),
+        Error,
+        "Function ABS expects numeric arguments"
+    );
+});
+
+Deno.test("interpreter executes math functions", async () => {
+    const output = await withOutput(async () => {
+        await execute(`
+            PRINT INT(3.7)
+            PRINT RND(100)
+            PRINT SQR(16)
+            PRINT SIN(0)
+            PRINT COS(0)
+            PRINT TAN(0)
+        `);
+    });
+
+    const lines = output.split('\n');
+    assertEquals(lines[0], "3");
+    assertEquals(Number(lines[1]) >= 0 && Number(lines[1]) < 100, true);
+    assertEquals(lines[2], "4");
+    assertEquals(lines[3], "0");
+    assertEquals(lines[4], "1");
+    assertEquals(lines[5], "0");
+});
+
+Deno.test("math functions handle edge cases", async () => {
+    const output = await withOutput(async () => {
+        await execute(`
+            PRINT SQR(0)
+            PRINT SIN(3.14159265359)
+            PRINT COS(3.14159265359)
+        `);
+    });
+
+    const lines = output.split('\n');
+    assertEquals(lines[0], "0");
+    assertEquals(Math.abs(Number(lines[1])) < 0.0001, true); // Should be close to 0
+    assertEquals(Math.abs(Number(lines[2]) + 1) < 0.0001, true); // Should be close to -1
+});
+
+// Add test for RND predictability
+Deno.test("RND generates values within range", async () => {
+    const output = await withOutput(async () => {
+        await execute(`
+            PRINT RND(10) < 10
+            PRINT RND(10) >= 0
+            PRINT RND() < 1
+            PRINT RND() >= 0
+        `);
+    });
+
+    assertEquals(output, "true\ntrue\ntrue\ntrue");
+});
+
+Deno.test("function edge cases and errors", async () => {
+    // Test edge cases
+    const output = await withOutput(async () => {
+        await execute(`
+            PRINT SQR(0)
+            PRINT ABS(0)
+            PRINT SGN(0)
+            PRINT INT(-3.7)
+            PRINT RND()
+        `);
+    });
+    
+    const lines = output.split('\n');
+    assertEquals(lines[0], "0");
+    assertEquals(lines[1], "0");
+    assertEquals(lines[2], "0");
+    assertEquals(lines[3], "-4");
+    assertEquals(Number(lines[4]) >= 0 && Number(lines[4]) < 1, true);
+
+    // Test errors
+    await assertRejects(
+        () => execute('PRINT SQR(-1)'),
+        Error,
+        "Square root of negative number"
+    );
+
+    await assertRejects(
+        () => execute('PRINT ABS("text")'),
+        Error,
+        "Function ABS expects numeric arguments"
+    );
+});
+
+Deno.test("operator precedence and grouping", async () => {
+    const output = await withOutput(async () => {
+        await execute(`
+            PRINT 2 + 3 * 4
+            PRINT (2 + 3) * 4
+            PRINT -2 * 3
+            PRINT NOT 0 AND 1
+            PRINT 1 OR 0 AND 0
+        `);
+    });
+    
+    const lines = output.split('\n');
+    assertEquals(lines[0], "14");     // 2 + (3 * 4)
+    assertEquals(lines[1], "20");     // (2 + 3) * 4
+    assertEquals(lines[2], "-6");     // (-2) * 3
+    assertEquals(lines[3], "true");   // (NOT 0) AND 1
+    assertEquals(lines[4], "true");   // 1 OR (0 AND 0)
+});

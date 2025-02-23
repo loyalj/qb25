@@ -1,37 +1,27 @@
-' Logic Operations Test Suite
-PRINT "Testing Logical Operations"
-PRINT "========================="
+CLS
+PRINT "QB25 Logical Operations Test Suite"
+PRINT "================================"
 
+' Test values
 LET x = 5
 LET y = 10
 LET z = 0
 
-' Basic IF THEN ELSE
-PRINT "Testing IF THEN ELSE:"
-IF x < y THEN PRINT "PASS: x is less than y" ELSE PRINT "FAIL: x should be less than y"
+PRINT "Comparison Operators:"
+PRINT "-------------------"
+PRINT "Equal (=): " + (x = 5)
+PRINT "Not Equal (<>): " + (x <> y)
+PRINT "Less Than (<): " + (x < y)
+PRINT "Greater Than (>): " + (y > x)
+PRINT "Less Equal (<=): " + (x <= 5)
+PRINT "Greater Equal (>=): " + (y >= 10)
 
-' Testing AND operator
-PRINT "Testing AND operator:"
-IF x > 0 AND y > 0 THEN PRINT "PASS: both x and y are positive"
+PRINT "Logical Operators:"
+PRINT "----------------"
+PRINT "AND: " + (x > 0 AND y > 0)
+PRINT "OR: " + (z > 0 OR x > 0)
+PRINT "NOT: " + (NOT (x > y))
 
-' Testing OR operator
-PRINT "Testing OR operator:"
-IF z > 0 OR x > 0 THEN PRINT "PASS: at least one value is positive"
-
-' Testing NOT operator
-PRINT "Testing NOT operator:"
-IF NOT z THEN PRINT "PASS: z is zero (false)"
-IF NOT (x > y) THEN PRINT "PASS: x is not greater than y"
-
-' Complex conditions
-PRINT "Testing complex conditions:"
-IF (x < y AND NOT z) OR y = 10 THEN PRINT "PASS: complex condition works"
-
-' Comparison operators
-PRINT "Testing all comparison operators:"
-IF x = 5 THEN PRINT "PASS: equality works"
-IF x <> y THEN PRINT "PASS: inequality works"
-IF x < y THEN PRINT "PASS: less than works"
-IF y > x THEN PRINT "PASS: greater than works"
-IF x <= 5 THEN PRINT "PASS: less than or equal works"
-IF y >= 10 THEN PRINT "PASS: greater than or equal works"
+PRINT "Complex Conditions:"
+PRINT "-----------------"
+PRINT "(x < y AND NOT z) OR y = 10: " + ((x < y AND NOT z) OR y = 10)

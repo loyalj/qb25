@@ -1,25 +1,28 @@
 CLS
+PRINT "QB25 Input Operations Test Suite"
+PRINT "==============================="
 
-' Input Operations Test Suite
-PRINT "Testing Input Operations"
-PRINT "======================="
-
-' Basic input
-PRINT "Please enter your name:"
+' String input
+PRINT "Enter your name:"
 INPUT name
 PRINT "Hello, " + name + "!"
 
-' Numeric input with calculations
-PRINT "Enter a number:"
+' Numeric input with validation demo
+PRINT "Enter a number between 1 and 10:"
 INPUT num
-PRINT "Your number doubled is:"
-PRINT num * 2
+IF num >= 1 AND num <= 10 THEN
+    PRINT "Valid input: " + num
+ELSE
+    PRINT "Invalid input!"
+END IF
 
-' Multiple inputs
-PRINT "Enter first number:"
+' Multiple inputs and calculations
+PRINT "Enter two numbers for calculation:"
+PRINT "First number:"
 INPUT a
-PRINT "Enter second number:"
+PRINT "Second number:"
 INPUT b
+PRINT "Results:"
 PRINT "Sum: " + (a + b)
 PRINT "Product: " + (a * b)
 

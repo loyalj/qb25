@@ -1,40 +1,69 @@
-' QB25 Full Feature Demo
-' This program demonstrates all features of QB25
-
 CLS
-PRINT "Welcome to QB25 Feature Demo"
-PRINT "==========================="
+PRINT "QB25 Complete Feature Demo"
+PRINT "========================="
+PRINT
 
-' Input and string handling
+' 1. Input and String Operations
+PRINT "PART 1: Input and Strings"
+PRINT "------------------------"
 PRINT "What's your name?"
 INPUT name
-PRINT "Hello, " + name + "! Let's test some features."
+PRINT "Hello, " + name + "!"
+PRINT
 
-' Arithmetic
-PRINT "Basic arithmetic:"
+' 2. Basic Arithmetic
+PRINT "PART 2: Arithmetic Operations"
+PRINT "---------------------------"
 LET a = 10
 LET b = 3
-PRINT "10 + 3 = " + (a + b)
-PRINT "10 - 3 = " + (a - b)
-PRINT "10 * 3 = " + (a * b)
-PRINT "10 / 3 = " + (a / b)
+PRINT "a = " + a
+PRINT "b = " + b
+PRINT "Sum: " + (a + b)
+PRINT "Difference: " + (a - b)
+PRINT "Product: " + (a * b)
+PRINT "Division: " + (a / b)
+PRINT
 
-' Logic and conditionals
-PRINT "Logic tests:"
+' 3. Built-in Functions
+PRINT "PART 3: Built-in Functions"
+PRINT "-------------------------"
+LET neg = -42
+PRINT "ABS(-42) = " + ABS(neg)
+PRINT "SGN(-42) = " + SGN(neg)
+PRINT "SGN(0) = " + SGN(0)
+PRINT "SGN(42) = " + SGN(42)
+PRINT
+
+' 4. Logic and Control Flow
+PRINT "PART 4: Logic Operations"
+PRINT "-----------------------"
 LET x = 5
-IF x = 5 THEN PRINT "PASS: x equals 5"
-IF NOT (x > 10) THEN PRINT "PASS: x is not greater than 10"
-IF x > 0 AND x < 10 THEN PRINT "PASS: x is between 0 and 10"
+LET y = 10
+PRINT
 
-' Complex expressions
-PRINT "Complex expression test:"
-LET result = (a + b) * (a - b)
-PRINT "(10 + 3) * (10 - 3) = " + result
+IF x < y THEN
+    PRINT "x is less than y"
+    IF x > 0 THEN
+        PRINT "x is positive"
+    END IF
+ELSE
+    PRINT "x is not less than y"
+END IF
+PRINT
 
-' Interactive calculation
-PRINT "Let's do some math!"
+IF x > 0 AND y > 0 THEN
+    PRINT "Both x and y are positive"
+END IF
+PRINT
+
+' 5. Interactive Calculator
+PRINT "PART 5: Interactive Calculator"
+PRINT "-----------------------------"
 PRINT "Enter a number:"
 INPUT num
-PRINT "Your number squared is: " + (num * num)
-
-PRINT "Demo complete! All features tested successfully!"
+PRINT
+PRINT "Original: " + num
+PRINT "ABS: " + ABS(num)
+PRINT "SGN: " + SGN(num)
+PRINT
+PRINT "Demo complete!"

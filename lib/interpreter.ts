@@ -6,6 +6,24 @@ const decoder = new TextDecoder();
 class Interpreter {
   private variables: Record<string, string | number | boolean> = {};
 
+  // Add built-in functions
+  private builtinFunctions: Record<string, Function> = {
+    "ABS": (x: number) => Math.abs(x),
+    "SGN": (x: number) => Math.sign(x),
+    "INT": (x: number) => Math.floor(x),
+    "RND": (max: number = 1) => {
+        if (max === undefined) return Math.random();
+        return Math.floor(Math.random() * max);
+    },
+    "SQR": (x: number) => {
+        if (x < 0) throw new Error("Square root of negative number");
+        return Math.sqrt(x);
+    },
+    "SIN": (x: number) => Math.sin(x),
+    "COS": (x: number) => Math.cos(x),
+    "TAN": (x: number) => Math.tan(x)
+  };
+
   private async evaluateExpression(node: ExpressionNode): Promise<string | number | boolean> {
     switch (node.type) {
       case "UnaryExpression": {
@@ -93,6 +111,34 @@ class Interpreter {
 
         throw new Error(`Invalid binary expression: ${left} ${operator} ${right}`);
       }
+      case "ArrayAccess":
+        throw new Error(`Arrays not yet supported`);
+      case "FunctionCall": {
+        const func = this.builtinFunctions[node.name];
+        if (!func) {
+          throw new Error(`Unknown function: ${node.name}`);
+        }
+
+        // Evaluate all arguments
+        const args = await Promise.all(
+          node.arguments.map(arg => this.evaluateExpression(arg))
+        );
+
+        // Ensure all arguments are numbers
+        const numericArgs = args.map(arg => {
+          if (typeof arg !== 'number') {
+            throw new Error(`Function ${node.name} expects numeric arguments`);
+          }
+          return arg;
+        });
+
+        try {
+          // Call the function
+          return func(...numericArgs);
+        } catch (e: any) { // Type annotation added here
+          throw new Error(`Error in function ${node.name}: ${e?.message || 'Unknown error'}`);
+        }
+      }
       default:
         throw new Error(`Unknown expression type: ${(node as ExpressionNode).type}`);
     }
@@ -101,6 +147,11 @@ class Interpreter {
   private async executeStatement(statement: Statement): Promise<void> {
     switch (statement.type) {
       case "Print": {
+        // Handle empty PRINT statements
+        if (statement.expression.type === "EmptyExpression") {
+          console.log();  // Print just a newline
+          return;
+        }
         const value = await this.evaluateExpression(statement.expression);
         console.log(value);
         break;
@@ -144,6 +195,16 @@ class Interpreter {
       await this.executeStatement(statement);
     }
   }
+}
+
+// Update getPrecedence function to match BASIC's precedence rules
+function getPrecedence(op: string): number {
+    if (op === "AND" || op === "OR") return 1;  // Lowest precedence
+    if (op === "=" || op === "<>" || op === "<" || op === ">" || op === "<=" || op === ">=") return 2;
+    if (op === "+" || op === "-") return 3;
+    if (op === "*" || op === "/") return 4;
+    if (op === "NOT") return 5;  // Highest precedence
+    return 0;
 }
 
 // Export a singleton instance
