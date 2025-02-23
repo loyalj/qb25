@@ -1,4 +1,4 @@
-import { parse, Statement, PrintNode, LetNode, InputNode, ClsNode, ExpressionNode, BinaryExpressionNode, StringLiteralNode, NumberLiteralNode, VariableNode, IfNode } from "./parser.ts";
+import { parse, Statement, ExpressionNode, BinaryExpressionNode, StringLiteralNode, NumberLiteralNode, VariableNode, IfNode } from "./parser.ts";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -205,7 +205,7 @@ class Interpreter {
         const inputBuffer = new Uint8Array(1024);
         const n = await Deno.stdin.read(inputBuffer);
         if (!n) return;
-        let value = decoder.decode(inputBuffer.subarray(0, n)).trim();
+        const value = decoder.decode(inputBuffer.subarray(0, n)).trim();
         this.variables[statement.variable] = isNaN(Number(value)) ? value : Number(value);
         break;
       }
@@ -235,16 +235,6 @@ class Interpreter {
       await this.executeStatement(statement);
     }
   }
-}
-
-// Update getPrecedence function to match BASIC's precedence rules
-function getPrecedence(op: string): number {
-    if (op === "AND" || op === "OR") return 1;  // Lowest precedence
-    if (op === "=" || op === "<>" || op === "<" || op === ">" || op === "<=" || op === ">=") return 2;
-    if (op === "+" || op === "-") return 3;
-    if (op === "*" || op === "/") return 4;
-    if (op === "NOT") return 5;  // Highest precedence
-    return 0;
 }
 
 // Export a singleton instance

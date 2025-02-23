@@ -1,5 +1,4 @@
-import { assertEquals } from "https://deno.land/std/testing/asserts.ts";
-import { execute } from "../lib/interpreter.ts";
+import { assertEquals } from "https://deno.land/std@0.224.0/testing/asserts.ts";
 import { captureOutput } from "./test-utils.ts";
 
 Deno.test("single line IF THEN ELSE", async () => {

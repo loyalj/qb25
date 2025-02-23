@@ -1,7 +1,7 @@
-import { assertEquals, assertRejects, assertThrows, assert } from "https://deno.land/std@0.204.0/testing/asserts.ts";
+import { assertEquals, assertRejects} from "https://deno.land/std@0.204.0/testing/asserts.ts";
 import { execute } from "../lib/interpreter.ts";
 import { parse } from "../lib/parser.ts";
-import type { PrintNode, FunctionCallNode } from "../lib/parser.ts";
+import type { PrintNode} from "../lib/parser.ts";
 
 // Helper function for capturing console output
 function withOutput(fn: () => Promise<void>): Promise<string> {

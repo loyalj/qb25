@@ -90,9 +90,9 @@ export interface DimNode extends ASTNode {
 export type Statement = PrintNode | LetNode | InputNode | ClsNode | IfNode | DimNode;
 
 export function parse(source: string): Statement[] {
-  let tokens = tokenize(source);
+  const tokens = tokenize(source);
   let index = 0;
-  let statements: Statement[] = [];
+  const statements: Statement[] = [];
 
   function skipNewlines() {
     while (index < tokens.length && tokens[index].type === TokenType.NEWLINE) {
@@ -198,7 +198,7 @@ export function parse(source: string): Statement[] {
     if ((token.type === TokenType.PUNCTUATION && token.value === "(") ||
         token.type === TokenType.LEFT_PAREN) {
       index++; // Consume '('
-      let expression = parseExpression(0);
+      const expression = parseExpression(0);
       // Support both PUNCTUATION and RIGHT_PAREN for closing parenthesis
       if (tokens[index].type === TokenType.RIGHT_PAREN || 
           (tokens[index].type === TokenType.PUNCTUATION && tokens[index].value === ")")) {
@@ -315,7 +315,7 @@ export function parse(source: string): Statement[] {
       throw new Error("Unexpected end of input");
     }
 
-    let token = tokens[index];
+    const token = tokens[index];
     
     // Remove redundant EOF check that was here
     
@@ -326,20 +326,20 @@ export function parse(source: string): Statement[] {
     if (token.type === TokenType.KEYWORD) {
       if (token.value === "PRINT") {
         index++; // Consume PRINT
-        let expression = parseExpression();
+        const expression = parseExpression();
         return { type: "Print", expression };
       } else if (token.value === "LET") {
         index++; // Consume LET
         if (index >= tokens.length) {
           throw new Error("Unexpected end of input");
         }
-        let variable = eat(TokenType.IDENTIFIER).value;
+        const variable = eat(TokenType.IDENTIFIER).value;
         eat(TokenType.OPERATOR); // Consume '='
-        let value = parseExpression();
+        const value = parseExpression();
         return { type: "Let", variable, value };
       } else if (token.value === "INPUT") {
         index++; // Consume INPUT
-        let variable = eat(TokenType.IDENTIFIER).value;
+        const variable = eat(TokenType.IDENTIFIER).value;
         return { type: "Input", variable };
       } else if (token.value === "CLS") {
         index++; // Consume CLS

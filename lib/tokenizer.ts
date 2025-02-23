@@ -42,11 +42,11 @@ export enum TokenType {
   ]);
   
   export function tokenize(source: string): Token[] {
-    let tokens: Token[] = [];
+    const tokens: Token[] = [];
     let i = 0;
   
     while (i < source.length) {
-      let char = source[i];
+      const char = source[i];
   
       // Handle newlines explicitly
       if (char === '\n' || char === ':') {
@@ -73,7 +73,7 @@ export enum TokenType {
   
       // String literals
       if (char === '"') {
-        let start = i++;
+        const start = i++;
         while (i < source.length && source[i] !== '"') i++;
         if (i < source.length) i++; // Skip closing "
         tokens.push({ type: TokenType.STRING, value: source.slice(start, i) });
@@ -82,7 +82,7 @@ export enum TokenType {
   
       // Numbers (update this section)
       if (/[\d.]/.test(char)) {
-        let start = i;
+        const start = i;
         let hasDecimal = char === '.';
         
         // If starting with decimal, must be followed by digit
@@ -111,9 +111,9 @@ export enum TokenType {
   
       // Update the identifier/keyword section
       if (/[A-Za-z]/.test(char)) {
-        let start = i++;
+        const start = i++;
         while (i < source.length && /[A-Za-z0-9_]/.test(source[i])) i++;
-        let value = source.slice(start, i).toUpperCase();
+        const value = source.slice(start, i).toUpperCase();
         
         let type = TokenType.IDENTIFIER;
         if (value === "NOT") {
@@ -142,7 +142,7 @@ export enum TokenType {
       if (operators.has(char)) {
         let op = char;
         if (i + 1 < source.length) {
-          let twoCharOp = char + source[i + 1];
+          const twoCharOp = char + source[i + 1];
           if (operators.has(twoCharOp)) {
             op = twoCharOp;
             i++;
