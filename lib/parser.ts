@@ -157,6 +157,72 @@ export function parse(source: string): Statement[] {
     throw new Error(`Unexpected token: ${token.value}`);
   }
 
+  function parseIfStatement(): IfNode {
+    index++; // Consume IF
+    const condition = parseExpression();
+    
+    if (tokens[index]?.type !== TokenType.THEN_KEYWORD) {
+      throw new Error("Expected THEN after IF condition");
+    }
+    index++; // Consume THEN
+  
+    let thenBranch: Statement[] = [];
+    let elseBranch: Statement[] | undefined;
+  
+    // If next token is newline, expect multi-line format
+    if (tokens[index]?.type === TokenType.NEWLINE) {
+      index++; // Consume newline
+      while (index < tokens.length && 
+             tokens[index].type !== TokenType.EOF && 
+             tokens[index].type !== TokenType.ELSE_KEYWORD &&
+             tokens[index].value !== "END" &&
+             tokens[index].value !== "ELSE") {
+        if (tokens[index].type === TokenType.NEWLINE) {
+          index++;
+          continue;
+        }
+        thenBranch.push(parseStatement());
+      }
+  
+      // Handle ELSE branch
+      if (tokens[index]?.value === "ELSE") {
+        index++; // Consume ELSE
+        if (tokens[index]?.type === TokenType.NEWLINE) {
+          index++;
+        }
+        elseBranch = [];
+        while (index < tokens.length && 
+               tokens[index].type !== TokenType.EOF && 
+               tokens[index].value !== "END") {
+          if (tokens[index].type === TokenType.NEWLINE) {
+            index++;
+            continue;
+          }
+          elseBranch.push(parseStatement());
+        }
+      }
+  
+      // Expect END IF
+      if (tokens[index]?.value !== "END") {
+        throw new Error("Expected END IF after multi-line IF block");
+      }
+      index++; // Consume END
+      if (tokens[index]?.value !== "IF") {
+        throw new Error("Expected IF after END");
+      }
+      index++; // Consume IF
+    } else {
+      // Single-line IF
+      thenBranch = [parseStatement()];
+      if (tokens[index]?.type === TokenType.ELSE_KEYWORD) {
+        index++; // Consume ELSE
+        elseBranch = [parseStatement()];
+      }
+    }
+  
+    return { type: "If", condition, thenBranch, elseBranch };
+  }
+
   function parseStatement(): Statement {
     if (index >= tokens.length || tokens[index].type === TokenType.EOF) {
       throw new Error("Unexpected end of input");
@@ -167,23 +233,7 @@ export function parse(source: string): Statement[] {
     // Remove redundant EOF check that was here
     
     if (token.type === TokenType.IF_KEYWORD) {
-      index++; // Consume IF
-      const condition = parseExpression();
-      
-      if (index >= tokens.length || tokens[index].type !== TokenType.THEN_KEYWORD) {
-        throw new Error("Expected THEN after IF condition");
-      }
-      index++; // Consume THEN
-      
-      const thenBranch = [parseStatement()];
-      
-      let elseBranch: Statement[] | undefined;
-      if (tokens[index]?.type === TokenType.ELSE_KEYWORD) {
-        index++; // Consume ELSE
-        elseBranch = [parseStatement()];
-      }
-      
-      return { type: "If", condition, thenBranch, elseBranch };
+      return parseIfStatement();
     }
 
     if (token.type === TokenType.KEYWORD) {

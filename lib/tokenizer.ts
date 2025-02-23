@@ -18,7 +18,8 @@ export enum TokenType {
   }
   
   const keywords = new Set([
-    "PRINT", "LET", "INPUT", "IF", "THEN", "ELSE", "GOTO", "FOR", "NEXT", "WHILE", "WEND", "CLS"
+    "PRINT", "LET", "INPUT", "IF", "THEN", "ELSE", "GOTO", "FOR", "NEXT", 
+    "WHILE", "WEND", "CLS", "END"
   ]);
   
   const operators = new Set(["+", "-", "*", "/", "=", "<", ">", "<=", ">=", "<>", "AND", "OR", "NOT"]);
@@ -31,7 +32,11 @@ export enum TokenType {
       let char = source[i];
   
       // Handle newlines explicitly
-      if (char === '\n') {
+      if (char === '\n' || char === ':') {
+        // Collapse multiple newlines into one
+        while (i + 1 < source.length && (source[i + 1] === '\n' || source[i + 1] === ':')) {
+          i++;
+        }
         tokens.push({ type: TokenType.NEWLINE, value: '\n' });
         i++;
         continue;
@@ -46,13 +51,6 @@ export enum TokenType {
       // Handle comments (`'` in QBasic)
       if (char === "'") {
         while (i < source.length && source[i] !== "\n") i++;
-        continue;
-      }
-
-      // Handle statement separator (':')
-      if (char === ':') {
-        tokens.push({ type: TokenType.NEWLINE, value: ':' }); // Use NEWLINE type for both : and \n
-        i++;
         continue;
       }
   
