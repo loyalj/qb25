@@ -287,10 +287,3 @@ export function tokenize(source: string): Token[] {
     
     return tokens;
 }
-
-export const KEYWORDS = new Set([
-    // ...existing keywords...
-    "SKIP",
-    "ESCAPE",
-    // ...rest of keywords...
-]);
