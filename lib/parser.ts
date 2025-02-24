@@ -1,4 +1,14 @@
 import { tokenize, Token, TokenType, functions } from "./tokenizer.ts";
+import { QBType, isValidQBType } from "./types.ts";
+
+// Add simple type checking functions
+function isTokenType(token: Token, type: TokenType): boolean {
+  return token.type === type;
+}
+
+function isAnyTokenType(token: Token, ...types: TokenType[]): boolean {
+  return types.includes(token.type);
+}
 
 export interface ASTNode {
   type: string;
@@ -6,13 +16,17 @@ export interface ASTNode {
 
 export interface PrintNode extends ASTNode {
   type: "Print";
-  expression: ExpressionNode;
+  expression?: ExpressionNode;
+  expressions?: ExpressionNode[];
 }
 
+// Update LetNode interface to handle array assignments
 export interface LetNode extends ASTNode {
   type: "Let";
-  variable: string;
-  value: ExpressionNode;
+  variable?: string;  // Optional because it might be an array access instead
+  value?: ExpressionNode;  // Optional because it might be an array assignment
+  arrayAccess?: ArrayAccessNode;  // For array assignments
+  expression?: ExpressionNode;  // For array assignments
 }
 
 export interface InputNode extends ASTNode {
@@ -43,9 +57,10 @@ export interface FunctionCallNode {
   arguments: ExpressionNode[];
 }
 
+// Update the ArrayAccessNode interface
 export interface ArrayAccessNode {
   type: "ArrayAccess";
-  name: string;
+  array: string;  // Changed from 'name' to 'array' for consistency
   index: ExpressionNode;
 }
 
@@ -58,6 +73,11 @@ export interface EmptyExpressionNode {
 export type ExpressionNode = StringLiteralNode | NumberLiteralNode | VariableNode | 
                            BinaryExpressionNode | UnaryExpressionNode | FunctionCallNode |
                            ArrayAccessNode | EmptyExpressionNode;
+
+// Move Statement type definition before interfaces that extend it
+export type Statement = {
+  type: string;
+} & (PrintNode | LetNode | InputNode | ClsNode | IfNode | DimNode | ForNode | WhileNode | GotoNode | LabelNode);
 
 export interface StringLiteralNode {
   type: "StringLiteral";
@@ -81,13 +101,45 @@ export interface BinaryExpressionNode {
   right: ExpressionNode;
 }
 
-export interface DimNode extends ASTNode {
+export interface DimNode {
   type: "Dim";
   variable: string;
-  size: number;
+  variableType: QBType;
+  size?: number;
 }
 
-export type Statement = PrintNode | LetNode | InputNode | ClsNode | IfNode | DimNode;
+export interface AssignmentNode {
+  type: "Let";
+  variable: string;
+  value: ExpressionNode;
+}
+
+export interface ForNode {
+  type: "For";
+  variable: string;
+  start: ExpressionNode;
+  end: ExpressionNode;
+  step?: ExpressionNode;
+  body: Statement[];
+}
+
+export interface WhileNode {
+  type: "While";
+  condition: ExpressionNode;
+  body: Statement[];
+}
+
+export interface GotoNode {
+  type: "Goto";
+  label: string;
+}
+
+export interface LabelNode {
+  type: "Label";
+  name: string;
+}
+
+let current = 0;
 
 export function parse(source: string): Statement[] {
   const tokens = tokenize(source);
@@ -95,16 +147,16 @@ export function parse(source: string): Statement[] {
   const statements: Statement[] = [];
 
   function skipNewlines() {
-    while (index < tokens.length && tokens[index].type === TokenType.NEWLINE) {
+    while (index < tokens.length && isTokenType(tokens[index], TokenType.NEWLINE)) {
       index++;
     }
   }
 
   function eat(type: TokenType): Token {
-    if (index >= tokens.length || tokens[index].type === TokenType.EOF) {
+    if (index >= tokens.length || isTokenType(tokens[index], TokenType.EOF)) {
       throw new Error("Unexpected end of input");
     }
-    if (tokens[index].type !== type) {
+    if (!isTokenType(tokens[index], type)) {
       throw new Error(`Unexpected token: ${tokens[index].value}`);
     }
     return tokens[index++];
@@ -136,7 +188,7 @@ export function parse(source: string): Statement[] {
   function parseExpression(precedence = 0): ExpressionNode {
     let left: ExpressionNode;
     
-    if (tokens[index]?.type === TokenType.NOT_OPERATOR) {
+    if (isTokenType(tokens[index], TokenType.NOT_OPERATOR)) {
         index++; // Consume NOT
         left = {
             type: "UnaryExpression",
@@ -149,7 +201,7 @@ export function parse(source: string): Statement[] {
 
     while (
         index < tokens.length &&
-        tokens[index]?.type === TokenType.OPERATOR &&
+        isTokenType(tokens[index], TokenType.OPERATOR) &&
         getPrecedence(tokens[index].value) >= precedence
     ) {
         const operator = tokens[index++].value;
@@ -164,26 +216,182 @@ export function parse(source: string): Statement[] {
     return left;
   }
 
-  function parsePrimary(): ExpressionNode {
-    if (index >= tokens.length) {
-        throw new Error("Unexpected end of input");
-    }
+  function isTokenOfType(token: Token, ...types: TokenType[]): boolean {
+    return types.includes(token.type);
+  }
 
+  // Add type guard functions at the top
+  function isFunction(token: Token): boolean {
+    return token.type === TokenType.FUNCTION;
+  }
+
+  function isStringFunction(token: Token): boolean {
+    return token.type === TokenType.STRING_FUNCTION;
+  }
+
+  type TokenTypeKey = keyof typeof TokenType;
+
+  function isToken(token: Token, ...types: TokenType[]): boolean {
+      return types.some(type => token.type === type);
+  }
+
+  type TokenTypeValue = typeof TokenType[keyof typeof TokenType];
+
+  function isTokenType(token: Token, ...types: TokenType[]): boolean {
+    return types.some(type => String(token.type) === String(type));
+  }
+
+  // Add type predicate function for safer type checks
+  function isFunctionToken(token: Token): boolean {
+    return [TokenType.FUNCTION, TokenType.STRING_FUNCTION].includes(token.type);
+  }
+
+  // Helper functions for type-safe token comparison
+  function tokenTypeEquals(token: Token, type: TokenType): boolean {
+    return token.type.toString() === type.toString();
+  }
+
+  function tokenTypeIsOneOf(token: Token, ...types: TokenType[]): boolean {
+    const tokenTypeStr = token.type.toString();
+    return types.some(type => type.toString() === tokenTypeStr);
+  }
+
+  function parseFunctionCall(name: string): FunctionCallNode {
+    eat(TokenType.LEFT_PAREN);
+    const args: ExpressionNode[] = [];
+    
+    if (!isTokenType(tokens[index], TokenType.RIGHT_PAREN)) {
+        args.push(parseExpression());
+        while (isTokenType(tokens[index], TokenType.COMMA)) {
+            index++;
+            args.push(parseExpression());
+        }
+    }
+    
+    eat(TokenType.RIGHT_PAREN);
+    return { type: "FunctionCall", name, arguments: args };
+}
+
+// Update the parsePrimary function's array access handling
+function parsePrimary(): ExpressionNode {
     const token = tokens[index];
 
-    // Handle empty lines and whitespace more gracefully
-    if (token.type === TokenType.NEWLINE) {
+    if (isAnyTokenType(token, TokenType.IDENTIFIER, TokenType.FUNCTION, TokenType.STRING_FUNCTION)) {
+        const name = token.value;
+        index++;
+
+        if (isTokenType(tokens[index], TokenType.LEFT_PAREN)) {
+            // Check if this is a known function name
+            if (isBuiltInFunction(name)) {
+                return parseFunctionCall(name);
+            }
+            
+            // If not a function, treat as array access
+            eat(TokenType.LEFT_PAREN);
+            const indexExpr = parseExpression();
+            eat(TokenType.RIGHT_PAREN);
+            
+            return {
+                type: "ArrayAccess",
+                array: name,  // This now matches the interface
+                index: indexExpr
+            };
+        }
+        
+        return { type: "Variable", name };
+    }
+
+    // Handle string functions and regular functions first
+    if (isTokenType(token, TokenType.STRING_FUNCTION) || isTokenType(token, TokenType.FUNCTION)) {
+        const name = token.value;
+        index++; // consume function name
+        
+        eat(TokenType.LEFT_PAREN);
+        const args: ExpressionNode[] = [];
+        
+        if (!isTokenType(tokens[index], TokenType.RIGHT_PAREN)) {
+            args.push(parseExpression());
+            while (isTokenType(tokens[index], TokenType.COMMA)) {
+                index++;
+                args.push(parseExpression());
+            }
+        }
+        
+        eat(TokenType.RIGHT_PAREN);
+        return { type: "FunctionCall", name, arguments: args };
+    }
+
+    // Handle identifiers first to catch function calls correctly
+    if (isAnyTokenType(token, TokenType.IDENTIFIER, TokenType.FUNCTION, TokenType.STRING_FUNCTION)) {
+        const name = token.value;
+        index++;
+
+        if (isTokenType(tokens[index], TokenType.LEFT_PAREN)) {
+            // Check if this is a known function name
+            if (isBuiltInFunction(name)) {
+                return parseFunctionCall(name);
+            }
+            
+            // If not a function, treat as array access
+            eat(TokenType.LEFT_PAREN);
+            const indexExpr = parseExpression();
+            eat(TokenType.RIGHT_PAREN);
+            
+            return {
+                type: "ArrayAccess",
+                array: name,
+                index: indexExpr
+            };
+        }
+        
+        return { type: "Variable", name };
+    }
+
+    if (isTokenType(token, TokenType.NEWLINE)) {
         index++;
         return { type: "EmptyExpression" };
     }
 
-    // Handle numbers with optional leading + or -
-    if ((token.type as TokenType) === TokenType.NUMBER || 
-        (token.type === TokenType.OPERATOR && 
-         (token.value === '+' || token.value === '-') && 
-         tokens[index + 1] && (tokens[index + 1].type as TokenType) === TokenType.NUMBER)) {
+    // Updated function and identifier handling
+    if (isAnyTokenType(token, TokenType.STRING_FUNCTION, TokenType.FUNCTION, TokenType.IDENTIFIER)) {
+        const name = token.value;
+        index++;
         
-        const isNegative = token.type === TokenType.OPERATOR && token.value === '-';
+        if (tokens[index] && isTokenType(tokens[index], TokenType.LEFT_PAREN)) {
+            // ...existing function parsing code...
+        }
+        
+        if (isTokenType(token, TokenType.IDENTIFIER)) {
+            return { type: "Variable", name };
+        }
+    }
+
+    // Replace the problematic conditional with matchesType
+    if (isFunctionToken(token)) {
+        const name = token.value;
+        index++;
+        eat(TokenType.LEFT_PAREN);
+        const args: ExpressionNode[] = [];
+        
+        if (!isTokenType(tokens[index], TokenType.RIGHT_PAREN)) {
+            args.push(parseExpression());
+            while (isTokenType(tokens[index], TokenType.COMMA)) {
+                index++;
+                args.push(parseExpression());
+            }
+        }
+        
+        eat(TokenType.RIGHT_PAREN);
+        return { type: "FunctionCall", name, arguments: args };
+    }
+
+    // Handle numbers with optional leading + or -
+    if (isTokenType(token, TokenType.NUMBER) || 
+        (isTokenType(token, TokenType.OPERATOR) && 
+         (token.value === '+' || token.value === '-') && 
+         tokens[index + 1] && isTokenType(tokens[index + 1], TokenType.NUMBER))) {
+        
+        const isNegative = isTokenType(token, TokenType.OPERATOR) && token.value === '-';
         if (isNegative || token.value === '+') {
             index++;
         }
@@ -195,60 +403,92 @@ export function parse(source: string): Statement[] {
     }
 
     // Add support for both PUNCTUATION and LEFT_PAREN types for opening parenthesis
-    if ((token.type === TokenType.PUNCTUATION && token.value === "(") ||
-        token.type === TokenType.LEFT_PAREN) {
+    if ((isTokenType(token, TokenType.PUNCTUATION) && token.value === "(") ||
+        isTokenType(token, TokenType.LEFT_PAREN)) {
       index++; // Consume '('
       const expression = parseExpression(0);
       // Support both PUNCTUATION and RIGHT_PAREN for closing parenthesis
-      if (tokens[index].type === TokenType.RIGHT_PAREN || 
-          (tokens[index].type === TokenType.PUNCTUATION && tokens[index].value === ")")) {
+      if (isTokenType(tokens[index], TokenType.RIGHT_PAREN) || 
+          (isTokenType(tokens[index], TokenType.PUNCTUATION) && tokens[index].value === ")")) {
         index++;
         return expression;
       }
       throw new Error("Expected closing parenthesis");
     }
 
-    if (token.type === TokenType.STRING) {
+    if (isTokenType(token, TokenType.STRING)) {
       index++;
       return { type: "StringLiteral", value: token.value.slice(1, -1) }; // Remove quotes
-    } else if (token.type === TokenType.NUMBER) {
+    } else if (isTokenType(token, TokenType.NUMBER)) {
       index++;
       return { type: "NumberLiteral", value: Number(token.value) };
-    } else if (token.type === TokenType.FUNCTION || token.type === TokenType.IDENTIFIER) {
+    } else if (isAnyTokenType(token, TokenType.FUNCTION, TokenType.IDENTIFIER)) {
+        const name = token.value;
         index++;
-        if (tokens[index]?.type === TokenType.LEFT_PAREN) {
-            index++; // Consume '('
+        
+        if (isTokenType(tokens[index], TokenType.LEFT_PAREN)) {
+            index++; // consume '('
             const args: ExpressionNode[] = [];
             
             // Handle function arguments
-            if (tokens[index].type !== TokenType.RIGHT_PAREN) {
+            if (!isTokenType(tokens[index], TokenType.RIGHT_PAREN)) {
                 args.push(parseExpression());
-                while (tokens[index].type === TokenType.COMMA) {
+                while (isTokenType(tokens[index], TokenType.COMMA)) {
                     index++; // Consume comma
                     args.push(parseExpression());
                 }
             }
             
             eat(TokenType.RIGHT_PAREN);
-
-            // Check if this is a known function when it's being used as one
-            if (token.type === TokenType.IDENTIFIER && !functions.has(token.value)) {
-                throw new Error(`Unknown function: ${token.value}`);
+            
+            // Check if this is a known function
+            if (isTokenType(token, TokenType.IDENTIFIER) && !functions.has(name)) {
+                throw new Error(`Unknown function: ${name}`);
             }
-
-            return { type: "FunctionCall", name: token.value, arguments: args };
+            
+            return { type: "FunctionCall", name, arguments: args };
         }
-        return { type: "Variable", name: token.value };
+        
+        return { type: "Variable", name };
+    }
+
+    if (isAnyTokenType(token, TokenType.STRING_FUNCTION, TokenType.FUNCTION)) {
+        const name = token.value;
+        index++;
+        eat(TokenType.LEFT_PAREN);
+        const args: ExpressionNode[] = [];
+        
+        if (!isTokenType(tokens[index], TokenType.RIGHT_PAREN)) {
+            args.push(parseExpression());
+            while (isTokenType(tokens[index], TokenType.COMMA)) {
+                index++;
+                args.push(parseExpression());
+            }
+        }
+        
+        eat(TokenType.RIGHT_PAREN);
+        return { type: "FunctionCall", name, arguments: args };
     }
 
     throw new Error(`Unexpected token: ${token.value}`);
-  }
+}
+
+// Add helper function to check if a name is a built-in function
+function isBuiltInFunction(name: string): boolean {
+    const builtInFunctions = [
+        "ABS", "SGN", "INT", "RND", "SQR", "SIN", "COS", "TAN",
+        "ATN", "LOG", "EXP", "CINT", "CSNG", "CDBL", "ATN2",
+        "LEFT$", "RIGHT$", "MID$", "CHR$", "ASC", "LEN",
+        "STR$", "VAL", "INSTR"
+    ];
+    return builtInFunctions.includes(name);
+}
 
   function parseIfStatement(): IfNode {
     index++; // Consume IF
     const condition = parseExpression();
-    
-    if (tokens[index]?.type !== TokenType.THEN_KEYWORD) {
+  
+    if (!isTokenType(tokens[index], TokenType.THEN_KEYWORD)) {
       throw new Error("Expected THEN after IF condition");
     }
     index++; // Consume THEN
@@ -257,14 +497,14 @@ export function parse(source: string): Statement[] {
     let elseBranch: Statement[] | undefined;
   
     // If next token is newline, expect multi-line format
-    if (tokens[index]?.type === TokenType.NEWLINE) {
+    if (isTokenType(tokens[index], TokenType.NEWLINE)) {
       index++; // Consume newline
       while (index < tokens.length && 
-             tokens[index].type !== TokenType.EOF && 
-             tokens[index].type !== TokenType.ELSE_KEYWORD &&
+             !isTokenType(tokens[index], TokenType.EOF) && 
+             !isTokenType(tokens[index], TokenType.ELSE_KEYWORD) &&
              tokens[index].value !== "END" &&
              tokens[index].value !== "ELSE") {
-        if (tokens[index].type === TokenType.NEWLINE) {
+        if (isTokenType(tokens[index], TokenType.NEWLINE)) {
           index++;
           continue;
         }
@@ -274,14 +514,14 @@ export function parse(source: string): Statement[] {
       // Handle ELSE branch
       if (tokens[index]?.value === "ELSE") {
         index++; // Consume ELSE
-        if (tokens[index]?.type === TokenType.NEWLINE) {
+        if (isTokenType(tokens[index], TokenType.NEWLINE)) {
           index++;
         }
         elseBranch = [];
         while (index < tokens.length && 
-               tokens[index].type !== TokenType.EOF && 
+               !isTokenType(tokens[index], TokenType.EOF) && 
                tokens[index].value !== "END") {
-          if (tokens[index].type === TokenType.NEWLINE) {
+          if (isTokenType(tokens[index], TokenType.NEWLINE)) {
             index++;
             continue;
           }
@@ -301,7 +541,7 @@ export function parse(source: string): Statement[] {
     } else {
       // Single-line IF
       thenBranch = [parseStatement()];
-      if (tokens[index]?.type === TokenType.ELSE_KEYWORD) {
+      if (isTokenType(tokens[index], TokenType.ELSE_KEYWORD)) {
         index++; // Consume ELSE
         elseBranch = [parseStatement()];
       }
@@ -310,53 +550,232 @@ export function parse(source: string): Statement[] {
     return { type: "If", condition, thenBranch, elseBranch };
   }
 
-  function parseStatement(): Statement {
-    if (index >= tokens.length || tokens[index].type === TokenType.EOF) {
-      throw new Error("Unexpected end of input");
+  function parseDimStatement(): DimNode {
+    index++; // Consume DIM
+    const variable = eat(TokenType.IDENTIFIER).value;
+    let size: number | undefined;
+    let variableType: QBType = QBType.SINGLE; // Default to SINGLE
+
+    // Handle array size declaration
+    if (isTokenType(tokens[index], TokenType.LEFT_PAREN)) {
+        index++; // consume (
+        const sizeToken = tokens[index];
+        
+        // Check for negative numbers
+        let isNegative = false;
+        if (isTokenType(sizeToken, TokenType.OPERATOR) && sizeToken.value === '-') {
+            index++; // consume negative sign
+            isNegative = true;
+        }
+        
+        const numToken = eat(TokenType.NUMBER);
+        size = Number(numToken.value);
+        if (isNegative) size = -size;
+        
+        if (size <= 0) {
+            throw new Error("Array size must be positive");
+        }
+        eat(TokenType.RIGHT_PAREN);
     }
 
+    // Handle type declaration
+    if (isTokenType(tokens[index], TokenType.AS)) {
+        index++; // consume AS
+        const typeToken = tokens[index];
+
+        if (!typeToken || !isTokenType(typeToken, TokenType.TYPE)) {
+            throw new Error("Invalid type");
+        }
+        
+        index++; // consume type token
+        const declaredType = typeToken.value.toUpperCase();
+        
+        if (!isValidQBType(declaredType)) {
+            throw new Error("Invalid type");
+        }
+        variableType = declaredType as QBType;
+    }
+
+    return {
+        type: "Dim",
+        variable,
+        variableType,
+        size
+    };
+  }
+
+  function parsePrintStatement(): PrintNode {
+    index++; // consume PRINT
+    
+    if (index >= tokens.length || isTokenType(tokens[index], TokenType.NEWLINE)) {
+        return { type: "Print", expression: { type: "EmptyExpression" } };
+    }
+    
+    const expressions: ExpressionNode[] = [];
+    let currentExpr = parseExpression();
+    expressions.push(currentExpr);
+    
+    while (index < tokens.length && isTokenType(tokens[index], TokenType.SEMICOLON)) {
+        index++; // consume semicolon
+        if (index < tokens.length && !isTokenType(tokens[index], TokenType.NEWLINE)) {
+            currentExpr = parseExpression();
+            expressions.push(currentExpr);
+        }
+    }
+    
+    return expressions.length === 1
+        ? { type: "Print", expression: expressions[0] }
+        : { type: "Print", expressions };
+}
+
+function parseStatement(): Statement {
+    skipNewlines();
+    
+    if (index >= tokens.length || isTokenType(tokens[index], TokenType.EOF)) {
+        throw new Error("Unexpected end of input");
+    }
+    
     const token = tokens[index];
     
-    // Remove redundant EOF check that was here
+    // Handle DIM statements first
+    if (isTokenType(token, TokenType.DIM_KEYWORD)) {
+        return parseDimStatement();
+    }
     
-    if (token.type === TokenType.IF_KEYWORD) {
-      return parseIfStatement();
+    if (isTokenType(token, TokenType.IF_KEYWORD)) {
+        return parseIfStatement();
     }
-
-    if (token.type === TokenType.KEYWORD) {
-      if (token.value === "PRINT") {
-        index++; // Consume PRINT
-        const expression = parseExpression();
-        return { type: "Print", expression };
-      } else if (token.value === "LET") {
-        index++; // Consume LET
-        if (index >= tokens.length) {
-          throw new Error("Unexpected end of input");
+    
+    if (isTokenType(token, TokenType.KEYWORD)) {
+        if (token.value === "PRINT") {
+            return parsePrintStatement();
+        } else if (token.value === "LET") {
+            index++; // Consume LET
+            const variable = eat(TokenType.IDENTIFIER).value;
+            
+            // Check if this is an array assignment
+            if (isTokenType(tokens[index], TokenType.LEFT_PAREN)) {
+                // Parse array assignment
+                index++; // consume (
+                const arrayIndex = parseExpression();
+                eat(TokenType.RIGHT_PAREN);
+                eat(TokenType.OPERATOR); // consume =
+                const expression = parseExpression();
+                
+                return {
+                    type: "Let",
+                    arrayAccess: {
+                        type: "ArrayAccess",
+                        array: variable,
+                        index: arrayIndex
+                    },
+                    expression
+                } as LetNode;
+            }
+            
+            // Regular variable assignment
+            eat(TokenType.OPERATOR); // consume =
+            const value = parseExpression();
+            return { type: "Let", variable, value } as LetNode;
+        } else if (token.value === "INPUT") {
+            index++; // Consume INPUT
+            const variable = eat(TokenType.IDENTIFIER).value;
+            return { type: "Input", variable };
+        } else if (token.value === "CLS") {
+            index++; // Consume CLS
+            return { type: "Cls" };
         }
-        const variable = eat(TokenType.IDENTIFIER).value;
-        eat(TokenType.OPERATOR); // Consume '='
-        const value = parseExpression();
-        return { type: "Let", variable, value };
-      } else if (token.value === "INPUT") {
-        index++; // Consume INPUT
-        const variable = eat(TokenType.IDENTIFIER).value;
-        return { type: "Input", variable };
-      } else if (token.value === "CLS") {
-        index++; // Consume CLS
-        return { type: "Cls" };
-      }
     }
 
-    if (token.type === TokenType.DIM_KEYWORD) {
-      index++; // Consume DIM
-      const variable = eat(TokenType.IDENTIFIER).value;
-      eat(TokenType.LEFT_PAREN);
-      const size = Number(eat(TokenType.NUMBER).value);
-      eat(TokenType.RIGHT_PAREN);
-      return { type: "Dim", variable, size };
+    if (isTokenType(token, TokenType.FOR_KEYWORD)) {
+        return parseForStatement();
+    }
+    
+    if (isTokenType(token, TokenType.WHILE_KEYWORD)) {
+        return parseWhileStatement();
+    }
+    
+    if (isTokenType(token, TokenType.GOTO_KEYWORD)) {
+        index++; // Consume GOTO
+        const label = eat(TokenType.IDENTIFIER).value;
+        return { type: "Goto", label };
+    }
+    
+    if (isTokenType(token, TokenType.LABEL)) {
+        const name = token.value;
+        index++;  // consume label
+        return { type: "Label", name };
     }
 
+    // If we reach here, we have an unrecognized token
     throw new Error(`Unexpected token: ${token.value}`);
+}
+
+  function parseForStatement(): ForNode {
+    index++; // consume FOR
+    const variable = eat(TokenType.IDENTIFIER).value;
+    eat(TokenType.OPERATOR); // consume =
+    const start = parseExpression();
+    
+    if (!isTokenType(tokens[index], TokenType.TO_KEYWORD)) {
+      throw new Error("Expected TO after FOR initialization");
+    }
+    
+    eat(TokenType.TO_KEYWORD);
+    const end = parseExpression();
+    
+    let step;
+    if (isTokenType(tokens[index], TokenType.STEP_KEYWORD)) {
+      index++; // consume STEP
+      step = parseExpression();
+    }
+    
+    const body: Statement[] = [];
+    skipNewlines();
+    
+    while (index < tokens.length && !isTokenType(tokens[index], TokenType.NEXT_KEYWORD)) {
+      if (isTokenType(tokens[index], TokenType.NEWLINE)) {
+        index++;
+        continue;
+      }
+      body.push(parseStatement());
+      skipNewlines();
+    }
+    
+    if (index >= tokens.length || !isTokenType(tokens[index], TokenType.NEXT_KEYWORD)) {
+      throw new Error("Expected NEXT at end of FOR loop");
+    }
+    
+    eat(TokenType.NEXT_KEYWORD);
+    const nextVar = eat(TokenType.IDENTIFIER).value;
+    
+    if (nextVar !== variable) {
+      throw new Error(`Mismatched FOR/NEXT variables: expected ${variable}, got ${nextVar}`);
+    }
+    
+    return { type: "For", variable, start, end, step, body };
+  }
+
+function parseWhileStatement(): WhileNode {
+    index++; // consume WHILE
+    const condition = parseExpression();
+    const body: Statement[] = [];
+    
+    while (index < tokens.length && !isTokenType(tokens[index], TokenType.WEND_KEYWORD)) {
+        body.push(parseStatement());
+        skipNewlines();
+    }
+    
+    eat(TokenType.WEND_KEYWORD);
+    return { type: "While", condition, body };
+}
+
+  function isAtEnd(): boolean {
+    return index >= tokens.length || isTokenType(tokens[index], TokenType.EOF);
+  }
+
+  function isNewline(token: Token): boolean {
+    return isTokenType(token, TokenType.NEWLINE);
   }
 
   // Modified parser loop
@@ -364,24 +783,11 @@ export function parse(source: string): Statement[] {
     skipNewlines(); // Skip any leading newlines
     
     // Break if we reach EOF after skipping newlines
-    if (index >= tokens.length || tokens[index].type === TokenType.EOF) {
+    if (index >= tokens.length || isTokenType(tokens[index], TokenType.EOF)) {
       break;
     }
-
+       
     statements.push(parseStatement());
-    
-    // After parsing a statement, we should allow either:
-    // 1. End of file
-    // 2. Newline
-    // 3. Another valid statement (like in multi-line IF)
-    if (index < tokens.length && tokens[index].type !== TokenType.EOF) {
-      // If it's a newline, skip all consecutive newlines
-      if (tokens[index].type === TokenType.NEWLINE) {
-        skipNewlines();
-      }
-      // Otherwise, continue to parse the next statement
-      // This allows IF/THEN blocks to work without requiring newlines
-    }
   }
 
   return statements;
