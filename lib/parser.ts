@@ -141,10 +141,21 @@ export interface LabelNode {
 
 let current = 0;
 
+interface LoopContext {
+    type: 'WHILE' | 'FOR';
+    depth: number;
+}
+
+// Add error interface before parse function
+interface ParserError {
+  message: string;
+}
+
 export function parse(source: string): Statement[] {
   const tokens = tokenize(source);
   let index = 0;
   const statements: Statement[] = [];
+  const loopStack: LoopContext[] = []; // Track nested loops
 
   function skipNewlines() {
     while (index < tokens.length && isTokenType(tokens[index], TokenType.NEWLINE)) {
@@ -484,7 +495,7 @@ function isBuiltInFunction(name: string): boolean {
     return builtInFunctions.includes(name);
 }
 
-  function parseIfStatement(): IfNode {
+function parseIfStatement(): IfNode {
     index++; // Consume IF
     const condition = parseExpression();
   
@@ -496,61 +507,72 @@ function isBuiltInFunction(name: string): boolean {
     let thenBranch: Statement[] = [];
     let elseBranch: Statement[] | undefined;
   
-    // If next token is newline, expect multi-line format
-    if (isTokenType(tokens[index], TokenType.NEWLINE)) {
-      index++; // Consume newline
-      while (index < tokens.length && 
-             !isTokenType(tokens[index], TokenType.EOF) && 
-             !isTokenType(tokens[index], TokenType.ELSE_KEYWORD) &&
-             tokens[index].value !== "END" &&
-             tokens[index].value !== "ELSE") {
-        if (isTokenType(tokens[index], TokenType.NEWLINE)) {
-          index++;
-          continue;
+    // Handle single-line IF first
+    if (!isTokenType(tokens[index], TokenType.NEWLINE)) {
+        thenBranch = [parseStatement()];
+        if (isTokenType(tokens[index], TokenType.ELSE_KEYWORD)) {
+            index++; // Consume ELSE
+            elseBranch = [parseStatement()];
         }
-        thenBranch.push(parseStatement());
-      }
-  
-      // Handle ELSE branch
-      if (tokens[index]?.value === "ELSE") {
+        return { type: "If", condition, thenBranch, elseBranch };
+    }
+    
+    // Multi-line IF
+    index++; // Consume newline
+    
+    // Parse THEN branch
+    while (index < tokens.length && 
+           !isTokenType(tokens[index], TokenType.EOF) && 
+           !isTokenType(tokens[index], TokenType.ELSE_KEYWORD) &&
+           tokens[index].value !== "END" &&
+           tokens[index].value !== "ELSE") {
+        if (isTokenType(tokens[index], TokenType.NEWLINE)) {
+            index++;
+            continue;
+        }
+        const stmt = parseStatement();
+        if (stmt !== null) {
+            thenBranch.push(stmt);
+        }
+        skipNewlines();
+    }
+
+    // Handle ELSE branch if present
+    if (index < tokens.length && tokens[index]?.value === "ELSE") {
         index++; // Consume ELSE
-        if (isTokenType(tokens[index], TokenType.NEWLINE)) {
-          index++;
-        }
+        skipNewlines();
         elseBranch = [];
+        
         while (index < tokens.length && 
                !isTokenType(tokens[index], TokenType.EOF) && 
                tokens[index].value !== "END") {
-          if (isTokenType(tokens[index], TokenType.NEWLINE)) {
-            index++;
-            continue;
-          }
-          elseBranch.push(parseStatement());
+            if (isTokenType(tokens[index], TokenType.NEWLINE)) {
+                index++;
+                continue;
+            }
+            const stmt = parseStatement();
+            if (stmt !== null) {
+                elseBranch.push(stmt);
+            }
+            skipNewlines();
         }
-      }
-  
-      // Expect END IF
-      if (tokens[index]?.value !== "END") {
-        throw new Error("Expected END IF after multi-line IF block");
-      }
-      index++; // Consume END
-      if (tokens[index]?.value !== "IF") {
-        throw new Error("Expected IF after END");
-      }
-      index++; // Consume IF
-    } else {
-      // Single-line IF
-      thenBranch = [parseStatement()];
-      if (isTokenType(tokens[index], TokenType.ELSE_KEYWORD)) {
-        index++; // Consume ELSE
-        elseBranch = [parseStatement()];
-      }
     }
-  
-    return { type: "If", condition, thenBranch, elseBranch };
-  }
 
-  function parseDimStatement(): DimNode {
+    // Validate END IF
+    if (!tokens[index] || tokens[index].value !== "END") {
+        throw new Error("Expected END IF after multi-line IF block");
+    }
+    index++; // Consume END
+    
+    if (!tokens[index] || tokens[index].value !== "IF") {
+        throw new Error("Expected IF after END");
+    }
+    index++; // Consume IF
+
+    return { type: "If", condition, thenBranch, elseBranch };
+}
+
+function parseDimStatement(): DimNode {
     index++; // Consume DIM
     const variable = eat(TokenType.IDENTIFIER).value;
     let size: number | undefined;
@@ -628,90 +650,37 @@ function isBuiltInFunction(name: string): boolean {
         : { type: "Print", expressions };
 }
 
-function parseStatement(): Statement {
-    skipNewlines();
+// Add this helper function to parse LET statements
+function parseLetStatement(): LetNode {
+    index++; // Consume LET
+    const variable = eat(TokenType.IDENTIFIER).value;
     
-    if (index >= tokens.length || isTokenType(tokens[index], TokenType.EOF)) {
-        throw new Error("Unexpected end of input");
+    // Check if this is an array assignment
+    if (isTokenType(tokens[index], TokenType.LEFT_PAREN)) {
+        index++; // consume (
+        const arrayIndex = parseExpression();
+        eat(TokenType.RIGHT_PAREN);
+        eat(TokenType.OPERATOR); // consume =
+        const expression = parseExpression();
+        
+        return {
+            type: "Let",
+            arrayAccess: {
+                type: "ArrayAccess",
+                array: variable,
+                index: arrayIndex
+            },
+            expression
+        } as LetNode;
     }
     
-    const token = tokens[index];
-    
-    // Handle DIM statements first
-    if (isTokenType(token, TokenType.DIM_KEYWORD)) {
-        return parseDimStatement();
-    }
-    
-    if (isTokenType(token, TokenType.IF_KEYWORD)) {
-        return parseIfStatement();
-    }
-    
-    if (isTokenType(token, TokenType.KEYWORD)) {
-        if (token.value === "PRINT") {
-            return parsePrintStatement();
-        } else if (token.value === "LET") {
-            index++; // Consume LET
-            const variable = eat(TokenType.IDENTIFIER).value;
-            
-            // Check if this is an array assignment
-            if (isTokenType(tokens[index], TokenType.LEFT_PAREN)) {
-                // Parse array assignment
-                index++; // consume (
-                const arrayIndex = parseExpression();
-                eat(TokenType.RIGHT_PAREN);
-                eat(TokenType.OPERATOR); // consume =
-                const expression = parseExpression();
-                
-                return {
-                    type: "Let",
-                    arrayAccess: {
-                        type: "ArrayAccess",
-                        array: variable,
-                        index: arrayIndex
-                    },
-                    expression
-                } as LetNode;
-            }
-            
-            // Regular variable assignment
-            eat(TokenType.OPERATOR); // consume =
-            const value = parseExpression();
-            return { type: "Let", variable, value } as LetNode;
-        } else if (token.value === "INPUT") {
-            index++; // Consume INPUT
-            const variable = eat(TokenType.IDENTIFIER).value;
-            return { type: "Input", variable };
-        } else if (token.value === "CLS") {
-            index++; // Consume CLS
-            return { type: "Cls" };
-        }
-    }
-
-    if (isTokenType(token, TokenType.FOR_KEYWORD)) {
-        return parseForStatement();
-    }
-    
-    if (isTokenType(token, TokenType.WHILE_KEYWORD)) {
-        return parseWhileStatement();
-    }
-    
-    if (isTokenType(token, TokenType.GOTO_KEYWORD)) {
-        index++; // Consume GOTO
-        const label = eat(TokenType.IDENTIFIER).value;
-        return { type: "Goto", label };
-    }
-    
-    if (isTokenType(token, TokenType.LABEL)) {
-        const name = token.value;
-        index++;  // consume label
-        return { type: "Label", name };
-    }
-
-    // If we reach here, we have an unrecognized token
-    throw new Error(`Unexpected token: ${token.value}`);
+    // Regular variable assignment
+    eat(TokenType.OPERATOR); // consume =
+    const value = parseExpression();
+    return { type: "Let", variable, value } as LetNode;
 }
 
-  function parseForStatement(): ForNode {
+function parseForStatement(): ForNode {
     index++; // consume FOR
     const variable = eat(TokenType.IDENTIFIER).value;
     eat(TokenType.OPERATOR); // consume =
@@ -750,24 +719,102 @@ function parseStatement(): Statement {
     const nextVar = eat(TokenType.IDENTIFIER).value;
     
     if (nextVar !== variable) {
-      throw new Error(`Mismatched FOR/NEXT variables: expected ${variable}, got ${nextVar}`);
+      throw new Error(`Mismatched FOR/NEXT variables: expected ${variable}, got ${nextVar}`);  // Fixed template string syntax
     }
     
     return { type: "For", variable, start, end, step, body };
   }
 
 function parseWhileStatement(): WhileNode {
+    if (!tokens[index] || !isTokenType(tokens[index], TokenType.WHILE_KEYWORD)) {
+        throw new Error("Expected WHILE");
+    }
+    
     index++; // consume WHILE
     const condition = parseExpression();
     const body: Statement[] = [];
     
-    while (index < tokens.length && !isTokenType(tokens[index], TokenType.WEND_KEYWORD)) {
-        body.push(parseStatement());
+    skipNewlines();
+    
+    while (index < tokens.length) {
+        // First check if we've hit WEND
+        if (isTokenType(tokens[index], TokenType.WEND_KEYWORD)) {
+            index++; // consume WEND
+            return { type: "While", condition, body };
+        }
+
+        // Skip empty lines
+        if (isTokenType(tokens[index], TokenType.NEWLINE)) {
+            index++;
+            continue;
+        }
+
+        // Parse the next statement with proper error handling
+        try {
+            const stmt = parseStatement();
+            if (stmt) {
+                body.push(stmt);
+            }
+        } catch (e) {
+            if (e instanceof Error && e.message === "Unexpected WEND without matching WHILE") {
+                // We found our matching WEND
+                index++; // consume WEND
+                return { type: "While", condition, body };
+            }
+            throw e;
+        }
         skipNewlines();
     }
+
+    throw new Error("Unexpected end of input: While statement requires WEND");
+}
+
+function parseStatement(): Statement {
+    skipNewlines();
     
-    eat(TokenType.WEND_KEYWORD);
-    return { type: "While", condition, body };
+    if (index >= tokens.length || isTokenType(tokens[index], TokenType.EOF)) {
+        throw new Error("Unexpected end of input");
+    }
+    
+    const token = tokens[index];
+    
+    switch (token.type) {
+        case TokenType.DIM_KEYWORD:
+            return parseDimStatement();
+        case TokenType.IF_KEYWORD:
+            return parseIfStatement();
+        case TokenType.WHILE_KEYWORD:
+            return parseWhileStatement();
+        case TokenType.FOR_KEYWORD:
+            return parseForStatement();
+        case TokenType.GOTO_KEYWORD:
+            index++; // Consume GOTO
+            const label = eat(TokenType.IDENTIFIER).value;
+            return { type: "Goto", label };
+        case TokenType.LABEL:
+            const name = token.value;
+            index++;  // consume label
+            return { type: "Label", name };
+        case TokenType.WEND_KEYWORD:
+            throw new Error("Unexpected WEND without matching WHILE");
+        default:
+            if (isTokenType(token, TokenType.KEYWORD)) {
+                switch (token.value) {
+                    case "PRINT":
+                        return parsePrintStatement();
+                    case "LET":
+                        return parseLetStatement();
+                    case "INPUT":
+                        index++;
+                        const variable = eat(TokenType.IDENTIFIER).value;
+                        return { type: "Input", variable };
+                    case "CLS":
+                        index++;
+                        return { type: "Cls" };
+                }
+            }
+            throw new Error(`Unexpected token: ${token.value}`);
+    }
 }
 
   function isAtEnd(): boolean {

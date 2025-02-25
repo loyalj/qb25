@@ -53,7 +53,7 @@ const specialTokens: Record<string, TokenType> = {
     "STEP": TokenType.STEP_KEYWORD,
     "NEXT": TokenType.NEXT_KEYWORD,
     "WHILE": TokenType.WHILE_KEYWORD,
-    "WEND": TokenType.WEND_KEYWORD,
+    "WEND": TokenType.WEND_KEYWORD,  // Make sure WEND is properly defined
     "DIM": TokenType.DIM_KEYWORD,
     "GOTO": TokenType.GOTO_KEYWORD,
     "AS": TokenType.AS,

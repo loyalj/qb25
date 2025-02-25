@@ -21,7 +21,7 @@ Deno.test("FOR loop with STEP", async () => {
 });
 
 // WHILE/WEND loops
-Deno.test("WHILE loop", async () => {
+Deno.test("basic while loop", async () => {
   const output = await captureOutput(`
     LET x = 1
     WHILE x <= 3

@@ -110,3 +110,20 @@ Deno.test("tokenizer - error cases", () => {
         );
     }
 });
+
+Deno.test("tokenizer - while loop tokens", () => {
+  const tokens = tokenize(`
+    WHILE x < 10
+      PRINT x
+      LET x = x + 1
+    WEND
+  `);
+
+  const whileToken = tokens.find(t => t.type === TokenType.WHILE_KEYWORD);
+  const wendToken = tokens.find(t => t.type === TokenType.WEND_KEYWORD);
+
+  assertEquals(!!whileToken, true, "WHILE keyword not tokenized correctly");
+  assertEquals(!!wendToken, true, "WEND keyword not tokenized correctly");
+  assertEquals(whileToken?.value, "WHILE");
+  assertEquals(wendToken?.value, "WEND");
+});

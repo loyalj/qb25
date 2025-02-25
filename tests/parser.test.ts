@@ -78,6 +78,28 @@ Deno.test("parser - control flow", () => {
     }
 });
 
+Deno.test("parser - while loop structure", () => {
+    const cases = [
+        {
+            input: `
+                WHILE x < 10
+                    PRINT x
+                    LET x = x + 1
+                WEND
+            `,
+            check: (stmt: WhileNode) => {
+                assertEquals(stmt.type, "While");
+                assertEquals(stmt.condition.type, "BinaryExpression");
+                assertEquals(stmt.body.length, 2);
+            }
+        }
+    ];
+
+    for (const { input, check } of cases) {
+        check(parse(input)[0] as any);
+    }
+});
+
 // Expression structure tests
 Deno.test("parser - expressions", () => {
     const cases = [
@@ -155,6 +177,30 @@ Deno.test("parser - errors", () => {
     ];
 
     for (const { input, error } of cases) {
+        assertThrows(
+            () => parse(input),
+            Error,
+            error
+        );
+    }
+});
+
+Deno.test("parser - while loop errors", () => {
+    const errorCases = [
+        {
+            input: `
+                WHILE x < 10
+                    PRINT x
+            `,
+            error: "Unexpected end of input: While statement requires WEND"  // Fixed error message
+        },
+        {
+            input: "WEND",
+            error: "Unexpected WEND without matching WHILE"  // Updated error message
+        }
+    ];
+
+    for (const { input, error } of errorCases) {
         assertThrows(
             () => parse(input),
             Error,
