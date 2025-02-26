@@ -675,31 +675,45 @@ class Interpreter {
      * Main execution entry point.
      * Parses and executes QBASIC source code.
      * @param source QBASIC source code to execute
+     * @param resetState Whether to reset interpreter state before execution
      * @throws Error if execution fails
      */
-    public async execute(source: string): Promise<void> {
+    public async execute(source: string, resetState: boolean = true): Promise<void> {
         try {
-            this.reset();
-            this.statements = parse(source);
+            if (resetState) {
+                this.reset();
+            }
+            const newStatements = parse(source);
             
-            // First pass: collect label positions
-            for (let i = 0; i < this.statements.length; i++) {
-                if (this.statements[i].type === "Label") {
-                    const labelNode = this.statements[i] as LabelNode;
-                    this.labels.set(labelNode.name, i);
+            // In REPL mode, we only add labels from the current input
+            if (resetState) {
+                this.statements = newStatements;
+                // Collect all labels
+                for (let i = 0; i < this.statements.length; i++) {
+                    if (this.statements[i].type === "Label") {
+                        const labelNode = this.statements[i] as LabelNode;
+                        this.labels.set(labelNode.name, i);
+                    }
+                }
+            } else {
+                // Execute statements immediately in REPL mode
+                for (const stmt of newStatements) {
+                    await this.executeStatement(stmt);
                 }
             }
             
-            // Second pass: execute statements
-            for (let i = 0; i < this.statements.length; i++) {
-                try {
-                    await this.executeStatement(this.statements[i]);
-                } catch (e) {
-                    if (e && typeof e === 'object' && 'isGoto' in e) {
-                        i = (e as GotoSignal).targetIndex;
-                        continue;
+            // Only execute all statements in file mode
+            if (resetState) {
+                for (let i = 0; i < this.statements.length; i++) {
+                    try {
+                        await this.executeStatement(this.statements[i]);
+                    } catch (e) {
+                        if (e && typeof e === 'object' && 'isGoto' in e) {
+                            i = (e as GotoSignal).targetIndex;
+                            continue;
+                        }
+                        throw e;
                     }
-                    throw e;
                 }
             }
         } catch (error) {
@@ -711,4 +725,13 @@ class Interpreter {
 }
 
 // Export a function that creates a new interpreter instance for each execution
-export const execute = (source: string) => new Interpreter().execute(source);
+export function createInterpreter() {
+  const interpreter = new Interpreter();
+  return {
+    execute: (source: string, resetState: boolean = true) => 
+      interpreter.execute(source, resetState)
+  };
+}
+
+// Keep for backwards compatibility with tests
+export const execute = (source: string) => createInterpreter().execute(source);

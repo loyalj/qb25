@@ -75,6 +75,43 @@ QB25 is a TypeScript implementation of a QBasic-like interpreter that runs in mo
 
 ## Usage
 
+### Interactive REPL Mode
+Start the REPL (Read-Eval-Print-Loop) by running QB25 without arguments:
+
+```bash
+deno run --allow-read qb.ts
+```
+
+This will start an interactive session where you can enter commands one at a time:
+
+```basic
+QB25 REPL Mode - Type EXIT to quit
+Ready.
+PRINT "Hello, World!"
+Hello, World!
+Ready.
+LET x = 42
+Ready.
+PRINT "Value: "; x
+Value: 42
+Ready.
+EXIT
+Goodbye!
+```
+
+The REPL mode maintains state between commands, allowing you to:
+- Declare variables and use them in subsequent commands
+- Build programs incrementally
+- Test expressions and statements interactively
+- Type 'EXIT' to quit the REPL
+
+### File Mode
+Run a QB25 program from a file:
+
+```bash
+deno run --allow-read qb.ts yourprogram.bas
+```
+
 ### Basic Example
 ```basic
 PRINT "Hello, World!"
@@ -124,10 +161,16 @@ done:
 
 ## Running the Interpreter
 
-The interpreter runs with Deno:
+QB25 can be run in two modes:
 
+1. REPL Mode (interactive):
 ```bash
-deno run --allow-read main.ts yourprogram.bas
+deno run --allow-read qb.ts
+```
+
+2. File Mode (execute a program):
+```bash
+deno run --allow-read qb.ts program.bas
 ```
 
 ## Development
