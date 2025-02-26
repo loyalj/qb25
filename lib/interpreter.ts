@@ -45,9 +45,16 @@ class Interpreter {
         if (max === undefined) return Math.random();
         return Math.floor(Math.random() * max);
     },
-    "SQR": (x: number) => {
-        if (x < 0) throw new Error("Square root of negative number");
-        return Math.sqrt(x);
+    "SQR": (x: any) => {
+      // Type check first
+      if (typeof x !== 'number') {
+        throw new Error("Type mismatch");
+      }
+      // Then validate range
+      if (x < 0) {
+        throw new Error("Square root of negative number");
+      }
+      return Math.sqrt(x);
     },
     "SIN": (x: number) => Math.sin(x),
     "COS": (x: number) => Math.cos(x),
@@ -68,8 +75,10 @@ class Interpreter {
     },
     "EXP": (x: number) => Math.exp(x),
     "ATN2": (y: number, x: number) => Math.atan2(y, x),
-    "CINT": (x: number) => {
-      // QBasic rounds ties away from zero
+    "CINT": (x: any) => {
+      if (typeof x !== 'number') {
+        throw new Error("Type mismatch");
+      }
       if (x > 0) {
         return Math.floor(x + 0.5);
       } else {
@@ -90,7 +99,40 @@ class Interpreter {
     "RIGHT$": (str: string, n: number) => str.slice(-n),
     "MID$": (str: string, start: number, length: number) => str.slice(start - 1, start - 1 + length),
     "LEN": (str: string) => str.length,
-    "INSTR$": (str: string, search: string) => str.indexOf(search) + 1
+    "INSTR": (str: string, search: string) => {
+      if (typeof str !== 'string' || typeof search !== 'string') {
+        throw new Error("Type mismatch");
+      }
+      return str.indexOf(search) + 1;  // QB uses 1-based indexing
+    },
+    "STR$": (x: any) => {
+      // Convert to number first to handle numeric variables
+      const num = Number(x);
+      if (isNaN(num)) {
+        throw new Error("STR$ function requires a numeric argument");
+      }
+      // Add a leading space for positive numbers and zero (QBASIC behavior)
+      return num >= 0 ? ` ${num}` : `${num}`;
+    },
+    "SPACE$": (n: number) => " ".repeat(Math.max(0, n)),
+    "STRING$": (n: number, char: string | number) => {
+      // Handle both string and numeric arguments (QBASIC behavior)
+      const charStr = typeof char === 'number' ? 
+        String.fromCharCode(char) : 
+        String(char);
+      return charStr.charAt(0).repeat(Math.max(0, n));
+    },
+    "LTRIM$": (str: string) => str.trimStart(),
+    "RTRIM$": (str: string) => str.trimEnd(),
+    "UCASE$": (str: string) => str.toUpperCase(),
+    "LCASE$": (str: string) => str.toLowerCase(),
+    "OCT$": (n: number) => Math.floor(n).toString(8),
+    "HEX$": (n: number) => Math.floor(n).toString(16).toUpperCase(),
+    "VAL": (str: any) => {
+      const strValue = String(str).trim();
+      const num = Number(strValue);
+      return isNaN(num) ? 0 : num;
+    },
   };
 
   private async evaluateDim(node: DimNode): Promise<void> {
@@ -149,8 +191,8 @@ class Interpreter {
         throw new Error(`Array ${node.array} is not defined`);
     }
 
-    const index = Number(await this.evaluateExpression(node.index, false));
-    if (index < 0 || index >= variable.value.length) {
+    const index = Math.floor(Number(await this.evaluateExpression(node.index, false)));
+    if (isNaN(index) || index < 0 || index >= variable.value.length) {
         throw new Error("Array index out of bounds");
     }
 
@@ -188,7 +230,10 @@ class Interpreter {
             throw new Error("Invalid assignment");
         }
 
+        // Evaluate value without string context for strict type checking
         const value = await this.evaluateExpression(statement.value, false);
+
+        // Set variable with strict type
         this.variables.set(statement.variable, {
             name: statement.variable,
             type: typeof value === 'string' ? QBType.STRING : QBType.SINGLE,
@@ -198,189 +243,183 @@ class Interpreter {
   }
 
   private async evaluateExpression(node: ExpressionNode, isPrintContext = false): Promise<any> {
-    switch (node.type) {
-      case "UnaryExpression": {
-        if (node.operator === "NOT") {
+    try {
+      switch (node.type) {
+        case "UnaryExpression": {
           const operand = await this.evaluateExpression(node.operand);
-          // Handle comparison results and boolean values
-          if (typeof operand === "boolean") {
-            return !operand;
+          switch (node.operator) {
+            case "NOT": return !operand;
+            case "+": return +operand;
+            case "-": return -operand;
+            default: throw new Error(`Unknown unary operator: ${node.operator}`);
           }
-          // Convert numbers to boolean (0 is false, non-zero is true)
-          if (typeof operand === "number") {
-            return operand === 0;
-          }
-          // Convert strings to boolean (empty string is false)
-          if (typeof operand === "string") {
-            return operand === "";
-          }
-          return !operand;
         }
-        throw new Error(`Unknown unary operator: ${node.operator}`);
-      }
-      case "StringLiteral":
-        return (node as StringLiteralNode).value;
-      case "NumberLiteral":
-        return (node as NumberLiteralNode).value;
-      case "Variable": {
-        const varName = (node as VariableNode).name;
-        const variable = this.variables.get(varName);
-        if (!variable) {
-          throw new Error(`Undefined variable: ${varName}`);
+        case "StringLiteral":
+          return (node as StringLiteralNode).value;
+        case "NumberLiteral":
+          return (node as NumberLiteralNode).value;
+        case "Variable": {
+          const varName = (node as VariableNode).name;
+          const variable = this.variables.get(varName.toUpperCase()); // Case-insensitive lookup
+          if (!variable) {
+            throw new Error(`Undefined variable: ${varName}`);
+          }
+          return variable.value;
         }
-        return variable.value;
-      }
-      case "BinaryExpression": {
-        const binaryNode = node as BinaryExpressionNode;
-        const operator = binaryNode.operator;
+        case "BinaryExpression": {
+          const binaryNode = node as BinaryExpressionNode;
+          const operator = binaryNode.operator;
 
-        // Handle logical operators first
-        if (operator === "AND" || operator === "OR") {
+          // Handle string concatenation first
+          if (operator === "+") {
+            const left = await this.evaluateExpression(binaryNode.left, isPrintContext);
+            const right = await this.evaluateExpression(binaryNode.right, isPrintContext);
+            if (typeof left === "string" || typeof right === "string") {
+              return String(left) + String(right);
+            }
+          }
+
+          // Handle logical operators
+          if (operator === "AND" || operator === "OR") {
+            const left = await this.evaluateExpression(binaryNode.left, false);
+            const right = await this.evaluateExpression(binaryNode.right, false);
+            const leftBool = typeof left === "boolean" ? left : left !== 0;
+            const rightBool = typeof right === "boolean" ? right : right !== 0;
+            return operator === "AND" ? leftBool && rightBool : leftBool || rightBool;
+          }
+
+          // For both PRINT and string variable assignment contexts
+          if (operator === "+" && (isPrintContext || await this.isStringContext(binaryNode))) {
+            const left = await this.evaluateExpression(binaryNode.left, isPrintContext);
+            const right = await this.evaluateExpression(binaryNode.right, isPrintContext);
+            if (typeof left === "string" || typeof right === "string") {
+              return String(left) + String(right);
+            }
+          }
+
+          // For all other cases, evaluate normally
           const left = await this.evaluateExpression(binaryNode.left, false);
           const right = await this.evaluateExpression(binaryNode.right, false);
-          const leftBool = typeof left === "boolean" ? left : left !== 0;
-          const rightBool = typeof right === "boolean" ? right : right !== 0;
-          return operator === "AND" ? leftBool && rightBool : leftBool || rightBool;
-        }
 
-        // For PRINT statements with string concatenation
-        if (isPrintContext && operator === "+") {
-          const left = await this.evaluateExpression(binaryNode.left, isPrintContext);
-          const right = await this.evaluateExpression(binaryNode.right, isPrintContext);
-          if (typeof left === "string" || typeof right === "string") {
-            return String(left) + String(right);
+          // Handle numeric operations and comparisons
+          if (typeof left === "number" && typeof right === "number") {
+            switch (operator) {
+              // Arithmetic operators
+              case "+": return left + right;
+              case "-": return left - right;
+              case "*": return left * right;
+              case "/": return right === 0 ? Infinity : left / right;  // Return Infinity for division by zero
+              // Comparison operators
+              case "=": return left === right;
+              case "<>": return left !== right;
+              case ">": return left > right;
+              case "<": return left < right;
+              case ">=": return left >= right;
+              case "<=": return left <= right;
+              default: throw new Error(`Unknown operator: ${operator}`);
+            }
           }
-        }
 
-        // For all other cases, evaluate normally
-        const left = await this.evaluateExpression(binaryNode.left, false);
-        const right = await this.evaluateExpression(binaryNode.right, false);
-
-        // Handle numeric operations and comparisons
-        if (typeof left === "number" && typeof right === "number") {
-          switch (operator) {
-            // Arithmetic operators
-            case "+": return left + right;
-            case "-": return left - right;
-            case "*": return left * right;
-            case "/": return right === 0 ? Infinity : left / right;  // Return Infinity for division by zero
-            // Comparison operators
-            case "=": return left === right;
-            case "<>": return left !== right;
-            case ">": return left > right;
-            case "<": return left < right;
-            case ">=": return left >= right;
-            case "<=": return left <= right;
-            default: throw new Error(`Unknown operator: ${operator}`);
+          // Handle string comparisons
+          if (typeof left === "string" && typeof right === "string") {
+            switch (operator) {
+              case "=": return left === right;
+              case "<>": return left !== right;
+              case ">": return left > right;
+              case "<": return left < right;
+              case ">=": return left >= right;
+              case "<=": return left <= right;
+              default: throw new Error("Invalid binary expression: string operations only support comparisons");
+            }
           }
-        }
 
-        // Handle string comparisons
-        if (typeof left === "string" && typeof right === "string") {
-          switch (operator) {
-            case "=": return left === right;
-            case "<>": return left !== right;
-            case ">": return left > right;
-            case "<": return left < right;
-            case ">=": return left >= right;
-            case "<=": return left <= right;
-            default: throw new Error("Invalid binary expression: string operations only support comparisons");
+          // Handle mixed type comparisons
+          if (operator === "=" || operator === "<>") {
+            const result = String(left) === String(right);
+            return operator === "=" ? result : !result;
           }
-        }
 
-        // Handle mixed type comparisons
-        if (operator === "=" || operator === "<>") {
-          const result = String(left) === String(right);
-          return operator === "=" ? result : !result;
+          throw new Error(`Invalid binary expression: incompatible types for operator ${operator}`);
         }
+        case "ArrayAccess":
+          return await this.evaluateArrayAccess(node);
+        case "FunctionCall": {
+          const func = this.builtinFunctions[node.name];
+          if (!func) {
+            throw new Error(`Unknown function: ${node.name}`);
+          }
 
-        throw new Error(`Invalid binary expression: incompatible types for operator ${operator}`);
+          // Evaluate arguments
+          const args = await Promise.all(
+            node.arguments.map(arg => this.evaluateExpression(arg, false))
+          );
+
+          // Don't wrap in try/catch to ensure errors propagate properly
+          return func(...args);
+        }
+        default:
+          throw new Error(`Unknown expression type: ${(node as ExpressionNode).type}`);
       }
-      case "ArrayAccess":
-        return await this.evaluateArrayAccess(node);
-      case "FunctionCall": {
-        const func = this.builtinFunctions[node.name];
-        if (!func) {
-          throw new Error(`Unknown function: ${node.name}`);
-        }
+    } catch (error) {
+      // Re-throw all errors
+      throw error;
+    }
+  }
 
-        // Evaluate all arguments first
-        const args = await Promise.all(
-            node.arguments.map(arg => this.evaluateExpression(arg))
-        );
-
-        // Handle ASC function specially
-        if (node.name === 'ASC') {
-            const arg = args[0];
-            if (typeof arg !== 'string') {
-                throw new Error("ASC function requires a string argument");
-            }
-            if (arg.length === 0) {
-                throw new Error("Cannot get ASCII code of empty string");
-            }
-            return func(arg);
-        }
-
-        // Special handling for string functions
-        if (node.name.endsWith('$') || node.name === 'LEN') {
-            const firstArg = String(args[0]);
-
-            if (['LEFT$', 'RIGHT$', 'MID$'].includes(node.name)) {
-                // First arg should be string, rest should be numbers
-                const numericArgs = args.slice(1).map(arg => {
-                    if (typeof arg !== 'number') {
-                        throw new Error(`Function ${node.name} expects numeric arguments after string argument`);
-                    }
-                    return arg;
-                });
-                return func(firstArg, ...numericArgs);
-            }
-
-            // For other string functions (LEN, etc)
-            return func(firstArg);
-        }
-
-        // For numeric-only functions, ensure all arguments are numbers
-        const numericArgs = args.map(arg => {
-            if (typeof arg !== 'number') {
-                throw new Error(`Function ${node.name} expects numeric arguments`);
-            }
-            return arg;
-        });
-
-        return func(...numericArgs);
-      }
-      default:
-        throw new Error(`Unknown expression type: ${(node as ExpressionNode).type}`);
+  // Add helper method to check for string context
+  private async isStringContext(node: BinaryExpressionNode): Promise<boolean> {
+    try {
+      const left = await this.evaluateExpression(node.left, false);
+      const right = await this.evaluateExpression(node.right, false);
+      return typeof left === 'string' || typeof right === 'string';
+    } catch {
+      return false;
     }
   }
 
   private async executeLetStatement(statement: LetNode): Promise<void> {
     if (!statement.variable && !statement.arrayAccess) {
-        throw new Error("Invalid LET statement");
+      throw new Error("Invalid LET statement");
     }
 
-    if (statement.variable && !this.variables.has(statement.variable)) {
-        const value = await this.evaluateExpression(statement.value!, false);
-        const varType = typeof value === 'string' ? QBType.STRING : QBType.SINGLE;
-        await this.evaluateDim({
-            type: "Dim",
-            variable: statement.variable,
-            variableType: varType
-        } as DimNode);
-    }
-
-    // Get existing variable before assignment
+    // Handle existing variable assignment
     if (statement.variable) {
-        const variable = this.variables.get(statement.variable);
-        if (variable) {
-            const newValue = await this.evaluateExpression(statement.value!, false);
-            // Type check before assignment
-            if ((variable.type === QBType.STRING && typeof newValue !== 'string') ||
-                (variable.type !== QBType.STRING && typeof newValue !== 'number')) {
-                throw new Error("Type mismatch");
-            }
+      const variable = this.variables.get(statement.variable);
+      if (variable) {
+        let newValue = await this.evaluateExpression(statement.value!, false);
+        
+        // For string variables, ensure the value is a string
+        if (variable.type === QBType.STRING) {
+          if (typeof newValue !== 'string') {
+            throw new Error("Type mismatch");
+          }
+          variable.value = String(newValue);
+          return;
         }
+
+        // For numeric variables, ensure we have a number
+        if (typeof newValue !== 'number') {
+          throw new Error("Type mismatch");
+        }
+        variable.value = newValue;
+        return;
+      }
+
+      // Auto-declare new variable
+      const value = await this.evaluateExpression(statement.value!, false);
+      const varType = typeof value === 'string' ? QBType.STRING : QBType.SINGLE;
+      await this.evaluateDim({
+        type: "Dim",
+        variable: statement.variable,
+        variableType: varType
+      } as DimNode);
+      
+      // Set the value
+      const newVar = this.variables.get(statement.variable);
+      if (newVar) {
+        newVar.value = value;
+      }
+      return;
     }
 
     await this.evaluateAssignment(statement);
@@ -399,16 +438,19 @@ class Interpreter {
           return;
         }
 
-        // Handle print with semicolon for expression lists
+        // Handle multiple expressions
         if (statement.expressions) {
-          const values = [];
-          for (const expr of statement.expressions) {
-            const value = await this.evaluateExpression(expr, true);
-            values.push(typeof value === "number" ? String(value) : value);
-          }
+          const values = await Promise.all(
+            statement.expressions.map(expr => 
+              this.evaluateExpression(expr, true)
+            )
+          );
           console.log(values.join(""));
-        } else if (statement.expression) {
-          // Handle single expression print
+          return;
+        }
+
+        // Handle single expression
+        if (statement.expression) {
           if (statement.expression.type === "EmptyExpression") {
             console.log();
             return;
@@ -557,11 +599,11 @@ class Interpreter {
               i = gotoSignal.targetIndex;
               continue;
             }
-            throw e;  // Re-throw any other errors
+            throw e;  // Re-throw any other errors immediately
           }
         }
     } catch (error) {
-        // Only throw if it's not our special GOTO signal
+        // Rethrow all errors except GOTO signals
         if (!error || typeof error !== 'object' || !('isGoto' in error)) {
           throw error;
         }

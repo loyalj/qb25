@@ -2,6 +2,13 @@ import { assertEquals, assertRejects } from "https://deno.land/std@0.224.0/testi
 import { captureOutput } from "./test-utils.ts";
 import { execute } from "../lib/interpreter.ts";
 
+// ...examine failing test...
+const program = `
+    DIM arr(10) AS INTEGER
+    arr(0) = 42
+    PRINT arr(0)
+`;
+
 Deno.test("array declaration and initialization", async () => {
   const output = await captureOutput(`
     DIM numbers(5) AS INTEGER

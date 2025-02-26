@@ -1,19 +1,10 @@
 import { assertEquals, assertRejects } from "https://deno.land/std@0.224.0/testing/asserts.ts";
 import { execute } from "../lib/interpreter.ts";
+import { captureOutput } from "./test-utils.ts";
 
 // Add helper function for float comparison
 function assertFloatEquals(actual: string, expected: string, precision = 7) {
   assertEquals(Number(actual).toFixed(precision), Number(expected).toFixed(precision));
-}
-
-// Helper function for capturing console output
-async function captureOutput(code: string): Promise<string> {
-  let output = "";
-  const originalLog = console.log;
-  console.log = (msg: any) => { output += String(msg) + "\n"; };
-  await execute(code);
-  console.log = originalLog;
-  return output.trim();
 }
 
 // Basic type declarations and operations
@@ -35,11 +26,11 @@ Deno.test("basic variable types", async () => {
     PRINT total
   `);
 
-  const outputLines = output.split("\n");
-  assertEquals(outputLines[0], "42");
-  assertEquals(outputLines[1], "John");
-  assertEquals(outputLines[2], "19.99");
-  assertEquals(outputLines[3], "123.456789");
+  // output is already an array, no need to split
+  assertEquals(output[0], "42");
+  assertEquals(output[1], "John");
+  assertEquals(output[2], "19.99");
+  assertEquals(output[3], "123.456789");
 });
 
 // Default values
@@ -53,16 +44,17 @@ Deno.test("default type values", async () => {
     PRINT n
   `);
   
-  const outputLines = output.split("\n");
-  assertEquals(outputLines[0], "0");
-  assertEquals(outputLines[1], "");
-  assertEquals(outputLines[2], "0");
+  // output is already an array, no need to split
+  assertEquals(output[0], "0");
+  assertEquals(output[1], "");
+  assertEquals(output[2], "0");
 });
 
 // Type mismatch errors
 Deno.test("type mismatch errors", async () => {
+  // String to number assignment should fail
   await assertRejects(
-    () => execute(`
+    () => captureOutput(`
       DIM x AS INTEGER
       LET x = "hello"
     `),
@@ -70,10 +62,11 @@ Deno.test("type mismatch errors", async () => {
     "Type mismatch"
   );
 
+  // Number to string assignment should fail
   await assertRejects(
-    () => execute(`
-      DIM s AS STRING
-      LET s = 42
+    () => captureOutput(`
+      DIM x AS STRING
+      LET x = 42
     `),
     Error,
     "Type mismatch"
@@ -91,9 +84,9 @@ Deno.test("type validation in expressions", async () => {
     PRINT i * d
   `);
   
-  const lines = output.split("\n");
-  assertFloatEquals(lines[0], "8.14");
-  assertFloatEquals(lines[1], "15.7");
+  // output is already an array, no need to split
+  assertFloatEquals(output[0], "8.14");
+  assertFloatEquals(output[1], "15.7");
 });
 
 // Error cases - update test to match case sensitivity
@@ -108,13 +101,13 @@ Deno.test("type error cases", async () => {
     "Variable X already declared"
   );
 
-  // Invalid type name
+  // This is the failing test
   await assertRejects(
     () => execute(`
       DIM x AS FLOAT
     `),
     Error,
-    "Invalid type"
+    "Invalid type"  // Expected error message
   );
 
   // Using undeclared variable

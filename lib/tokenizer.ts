@@ -28,7 +28,7 @@ export const enum TokenType {
     STEP_KEYWORD = "STEP_KEYWORD",
     NEXT_KEYWORD = "NEXT_KEYWORD",
     WHILE_KEYWORD = "WHILE_KEYWORD",
-    WEND_KEYWORD = "WEND_KEYWORD",
+    WEND_KEYWORD = "WEND_KEYWORD",  // Make sure WEND is properly defined
     DIM_KEYWORD = "DIM_KEYWORD",
     GOTO_KEYWORD = "GOTO_KEYWORD",
     END_KEYWORD = "END_KEYWORD"
@@ -64,21 +64,26 @@ const specialTokens: Record<string, TokenType> = {
     "RETURN": TokenType.KEYWORD,
     "GOSUB": TokenType.KEYWORD,
     "SKIP": TokenType.IDENTIFIER,  // Add support for labels
-    "ESCAPE": TokenType.IDENTIFIER  // Add support for labels
+    "ESCAPE": TokenType.IDENTIFIER,  // Add support for labels
+    "IS": TokenType.OPERATOR  // Add IS as an operator
 };
 
-const operators = new Set(["+", "-", "*", "/", "=", "<", ">", "<=", ">=", "<>", "AND", "OR"]);
+// Update operators set to include additional operators
+export const operators = new Set([
+  "+", "-", "*", "/", "=", "<", ">", "<=", ">=", "<>", "AND", "OR", "IS"
+]);
 
 export const functions = new Set([
     "ABS", "SGN", "INT", "RND", "SQR", 
     "SIN", "COS", "TAN", "ASC", "ATN",
-    "LOG", "EXP", "ATN2", "CINT", "CSNG", "CDBL", "LEN",
-    // Add string functions (with $) to the main functions set
-    "LEFT$", "RIGHT$", "MID$", "CHR$", "STR$", "INSTR$", "LEN$"
+    "LOG", "EXP", "ATN2", "CINT", "CSNG", "CDBL",
+    "VAL", "LEN" // Add VAL and LEN to main functions set
 ]);
 
-const stringFunctions = new Set([
-    "LEFT$", "RIGHT$", "MID$", "CHR$", "STR$", "INSTR$", "LEN$"
+export const stringFunctions = new Set([
+    "LEFT$", "RIGHT$", "MID$", "CHR$", "STR$", "INSTR",  // Changed INSTR$ to INSTR
+    "SPACE$", "STRING$", "LTRIM$", "RTRIM$", "UCASE$", "LCASE$",
+    "OCT$", "HEX$"
 ]);
 
 const validTypes = new Set(["INTEGER", "SINGLE", "DOUBLE", "STRING"]);
@@ -208,14 +213,49 @@ export function tokenize(source: string): Token[] {
             continue;
         }
 
-        // Handle identifiers and keywords
+        // Handle identifiers and keywords first
         if (/[A-Za-z_]/.test(char)) {
             let word = '';
-            while (i < source.length && /[A-Za-z0-9_]/.test(source[i])) {
+            let hasDollarSign = false;
+            
+            // Include the $ in the word for string functions
+            while (i < source.length && 
+                   (/[A-Za-z0-9_]/.test(source[i]) || 
+                    (!hasDollarSign && source[i] === '$'))) {
+                if (source[i] === '$') {
+                    hasDollarSign = true;
+                }
                 word += source[i++];
             }
             
             const upperWord = word.toUpperCase();
+
+            // Check for type declarations after AS
+            if (tokens.length > 0 && tokens[tokens.length - 1].type === TokenType.AS) {
+                if (!validTypes.has(upperWord)) {
+                    throw new Error("Invalid type");
+                }
+                tokens.push({ type: TokenType.TYPE, value: upperWord });
+                continue;
+            }
+
+            // Check for keywords first
+            if (upperWord in specialTokens) {
+                tokens.push({ type: specialTokens[upperWord], value: upperWord });
+                continue;
+            }
+
+            // Single check for string functions - fixed syntax
+            if (stringFunctions.has(upperWord) || upperWord.endsWith('$')) {
+                tokens.push({ type: TokenType.STRING_FUNCTION, value: upperWord });
+                continue;
+            }
+
+            // Check for regular functions
+            if (functions.has(upperWord)) {
+                tokens.push({ type: TokenType.FUNCTION, value: upperWord });
+                continue;
+            }
 
             // Handle string function names with $ suffix
             if (i < source.length && source[i] === '$') {
@@ -240,7 +280,7 @@ export function tokenize(source: string): Token[] {
             }
 
             // Check for types
-            if (typeKeywords.has(upperWord)) {
+            if (typeKeywords.has(upperWord) || validTypes.has(upperWord)) {
                 tokens.push({ type: TokenType.TYPE, value: upperWord });
                 continue;
             }

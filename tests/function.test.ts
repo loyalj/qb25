@@ -186,29 +186,41 @@ Deno.test("function comprehensive edge cases", async () => {
 });
 
 Deno.test("function error conditions", async () => {
-    await assertRejects(
-        () => execute('PRINT SQR(-1)'),
-        Error,
-        "Square root of negative number"
-    );
+  // Test negative square root
+  await assertRejects(
+    async () => { 
+      await execute(`PRINT SQR(-1)`);
+    },
+    Error,
+    "Square root of negative number"
+  );
 
-    await assertRejects(
-        () => execute('PRINT LOG(-1)'),
-        Error,
-        "Cannot take logarithm of negative number"
-    );
+  // Test log of negative number
+  await assertRejects(
+    async () => {
+      await execute('PRINT LOG(-1)');
+    },
+    Error,
+    "Cannot take logarithm of negative number"
+  );
 
-    await assertRejects(
-        () => execute('PRINT LOG(0)'),
-        Error,
-        "Cannot take logarithm of zero"
-    );
+  // Test log of zero
+  await assertRejects(
+    async () => {
+      await execute('PRINT LOG(0)');
+    },
+    Error,
+    "Cannot take logarithm of zero"
+  );
 
-    await assertRejects(
-        () => execute('PRINT CINT("hello")'),
-        Error,
-        "Function CINT expects numeric arguments"
-    );
+  // Test non-numeric argument
+  await assertRejects(
+    async () => {
+      await execute('PRINT CINT("hello")');
+    },
+    Error,
+    "Type mismatch"
+  );
 });
 
 Deno.test("numeric precision and rounding", async () => {

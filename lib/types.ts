@@ -22,19 +22,36 @@ export function getDefaultValue(type: QBType): number | string {
 }
 
 export function validateType(type: QBType, value: any): boolean {
-  // For arrays, check each element
+  // Handle arrays separately
   if (Array.isArray(value)) {
-    return value.every(item => validateArrayValue(type, item));
+    throw new Error("Type mismatch in array");
   }
 
-  // For single values
-  if (!validateArrayValue(type, value)) {
-    throw new Error("Type mismatch");  // Make sure we throw the error
+  // Handle single values
+  switch (type) {
+    case QBType.INTEGER:
+      if (typeof value !== 'number' || !Number.isInteger(value)) {
+        throw new Error("Type mismatch: expected INTEGER");
+      }
+      break;
+    case QBType.SINGLE:
+    case QBType.DOUBLE:
+      if (typeof value !== 'number') {
+        throw new Error(`Type mismatch: expected ${type}`);
+      }
+      break;
+    case QBType.STRING:
+      if (typeof value !== 'string') {
+        throw new Error("Type mismatch: expected STRING");
+      }
+      break;
+    default:
+      throw new Error("Invalid type");
   }
   return true;
 }
 
-export function validateArrayValue(type: QBType, value: any): boolean {
+function validateValue(type: QBType, value: any): boolean {
   switch (type) {
     case QBType.INTEGER:
       return typeof value === 'number' && Number.isInteger(value);
@@ -44,7 +61,7 @@ export function validateArrayValue(type: QBType, value: any): boolean {
     case QBType.STRING:
       return typeof value === 'string';
     default:
-      throw new Error("Type mismatch");  // Change error message here too
+      throw new Error("Invalid type");
   }
 }
 
